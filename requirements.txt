@@ -1,0 +1,9 @@
+pandas
+numpy
+requests
+python-dotenv
+PyYAML
+pyarrow
+pvlib
+scikit-learn
+statsmodels
