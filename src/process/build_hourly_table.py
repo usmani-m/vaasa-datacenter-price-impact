@@ -1,0 +1,218 @@
+"""Merge Fingrid and weather series into one hourly UTC table.
+
+Input:  data/hourly/fingrid/<name>_<start>_<end>.parquet  (src.fetch.fingrid)
+        data/hourly/weather/<point>_<start>_<end>.parquet (src.fetch.weather)
+Output: data/processed/hourly_<year>.parquet
+        outputs/figures/sanity_weeks_<year>.png
+
+Columns (power in MW = MWh/h, index = hour start, UTC):
+  Fingrid      consumption, production, wind, solar (Fingrid FORECAST 248), nuclear, hydro,
+               net_import (+ = import), other (= production - wind - solar - nuclear - hydro),
+               solar_capacity (MW assumed by Fingrid, forward-filled),
+               wind_capacity (MW; only if a source is configured, see WIND_CAPACITY_NAME)
+  flags        flag_<series>: "ok" | "filled" (gap <= MAX_GAP_H, linear interpolation) | "missing"
+               Derived series take the worst flag of their inputs.
+  weather      ws100_<point> per wind point, ws100_mean (wind points),
+               temp_mean (city points, C), ghi_mean (shortwave, city points, W/m2)
+  derived      residual_load = consumption - wind - solar, wind_cf, solar_cf
+  calendar     hour_local, weekday_local (0 = Mon), month_local, is_holiday
+               (Europe/Helsinki local time; holidays from the `holidays` package, incl.
+               Midsummer Eve and Christmas Eve)
+  price        price_eur_mwh: empty placeholder until ENTSO-E is connected
+
+Usage:
+    python -m src.process.build_hourly_table --year 2024
+"""
+
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+
+import holidays
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+
+from src.fetch import fingrid, weather
+
+MAX_GAP_H = 3
+LOCAL_TZ = "Europe/Helsinki"
+FINGRID_SERIES = ["consumption", "production", "wind", "solar", "nuclear", "hydro", "net_import"]
+# Short name in config/fingrid_datasets.yaml for installed wind capacity. Not set until a
+# source is confirmed; wind_capacity and wind_cf stay empty until then.
+WIND_CAPACITY_NAME: str | None = None
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+PROCESSED_DIR = REPO_ROOT / "data" / "processed"
+FIGURES_DIR = REPO_ROOT / "outputs" / "figures"
+
+FLAG_ORDER = ["ok", "filled", "missing"]
+
+
+def fill_short_gaps(s: pd.Series, max_gap: int = MAX_GAP_H) -> tuple[pd.Series, pd.Series]:
+    """Linearly interpolate interior NaN runs of <= max_gap hours; flag every hour."""
+    isna = s.isna()
+    run_id = (isna != isna.shift()).cumsum()
+    run_len = isna.groupby(run_id).transform("size")
+    interp = s.interpolate(method="linear", limit_area="inside")
+    fill = isna & (run_len <= max_gap) & interp.notna()
+    out = s.where(~fill, interp)
+    flag = pd.Series(np.where(fill, "filled", np.where(out.isna(), "missing", "ok")), index=s.index)
+    return out, flag
+
+
+def worst_flag(*flags: pd.Series) -> pd.Series:
+    rank = pd.concat([f.map(FLAG_ORDER.index) for f in flags], axis=1).max(axis=1)
+    return rank.map(dict(enumerate(FLAG_ORDER)))
+
+
+def build(year: int) -> pd.DataFrame:
+    start, end = f"{year}-01-01", f"{year + 1}-01-01"
+    idx = pd.date_range(start, end, freq="1h", inclusive="left", tz="UTC", name="time_utc")
+    t = pd.DataFrame(index=idx)
+
+    def fg(name: str) -> pd.Series:
+        return pd.read_parquet(fingrid.hourly_path(name, start, end))["value"].reindex(idx)
+
+    # Fingrid series with short-gap filling
+    for name in FINGRID_SERIES:
+        t[name], t[f"flag_{name}"] = fill_short_gaps(fg(name))
+    parts = ["production", "wind", "solar", "nuclear", "hydro"]
+    t["other"] = t["production"] - t["wind"] - t["solar"] - t["nuclear"] - t["hydro"]
+    t["flag_other"] = worst_flag(*(t[f"flag_{p}"] for p in parts))
+
+    # Capacities: step series, forward-filled
+    sc = fg("solar_capacity")
+    t["solar_capacity"] = sc.ffill()
+    t["flag_solar_capacity"] = np.where(sc.notna(), "ok", np.where(t["solar_capacity"].notna(), "filled", "missing"))
+    if WIND_CAPACITY_NAME:
+        wc = fg(WIND_CAPACITY_NAME)
+        t["wind_capacity"] = wc.ffill()
+        t["flag_wind_capacity"] = np.where(wc.notna(), "ok", np.where(t["wind_capacity"].notna(), "filled", "missing"))
+    else:
+        t["wind_capacity"] = np.nan
+        t["flag_wind_capacity"] = "missing"
+
+    # Weather
+    groups = weather.load_locations()
+    wx = {n: pd.read_parquet(weather.hourly_path(n, start, end)).reindex(idx) for g in groups.values() for n in g}
+    for n in groups["wind"]:
+        t[f"ws100_{n}"] = wx[n]["wind_speed_100m"]
+    t["ws100_mean"] = t[[f"ws100_{n}" for n in groups["wind"]]].mean(axis=1)
+    t["temp_mean"] = pd.concat([wx[n]["temperature_2m"] for n in groups["solar"]], axis=1).mean(axis=1)
+    t["ghi_mean"] = pd.concat([wx[n]["shortwave_radiation"] for n in groups["solar"]], axis=1).mean(axis=1)
+
+    # Derived
+    t["residual_load"] = t["consumption"] - t["wind"] - t["solar"]
+    t["flag_residual_load"] = worst_flag(t["flag_consumption"], t["flag_wind"], t["flag_solar"])
+    t["wind_cf"] = t["wind"] / t["wind_capacity"]
+    t["solar_cf"] = t["solar"] / t["solar_capacity"]
+
+    # Calendar (local time)
+    local = idx.tz_convert(LOCAL_TZ)
+    fi_holidays = holidays.Finland(years=[year - 1, year, year + 1])
+    t["hour_local"] = local.hour
+    t["weekday_local"] = local.weekday
+    t["month_local"] = local.month
+    t["is_holiday"] = [d in fi_holidays for d in local.date]
+
+    t["price_eur_mwh"] = np.nan  # placeholder: ENTSO-E day-ahead price
+
+    for c in t.columns:
+        if c.startswith("flag_"):
+            t[c] = pd.Categorical(t[c], categories=FLAG_ORDER)
+    return t
+
+
+def summarize(t: pd.DataFrame) -> None:
+    pd.set_option("display.width", 160)
+    print(f"\n=== Hourly table: {t.shape[0]} rows x {t.shape[1]} columns, "
+          f"{t.index.min():%Y-%m-%d %H:%M} .. {t.index.max():%Y-%m-%d %H:%M} UTC ===")
+    print("Columns:", ", ".join(t.columns))
+
+    flags = {c.removeprefix("flag_"): t[c].value_counts().reindex(FLAG_ORDER, fill_value=0) for c in t if c.startswith("flag_")}
+    print("\nHours per flag:")
+    print(pd.DataFrame(flags).T.to_string())
+
+    data_cols = [c for c in t.columns if not c.startswith("flag_") and c != "price_eur_mwh"]
+    nan = t[data_cols].isna().sum()
+    print("\nRemaining NaN hours (non-flag columns):", nan[nan > 0].to_dict() or "none")
+
+    m = t[["residual_load", "consumption", "wind", "solar"]].resample("MS").mean().round(0)
+    m.index = m.index.strftime("%Y-%m")
+    print("\nMonthly mean (MW):")
+    print(m.to_string())
+
+
+def plot_weeks(t: pd.DataFrame, year: int) -> Path:
+    # Reference palette (dataviz skill), categorical slots 1-4, light mode
+    series = [
+        ("consumption", "Consumption", "#2a78d6"),
+        ("residual_load", "Residual load", "#eb6834"),
+        ("nuclear", "Nuclear", "#1baf7a"),
+        ("wind", "Wind", "#eda100"),
+    ]
+    weeks = [("January", f"{year}-01-08", f"{year}-01-15"), ("July", f"{year}-07-08", f"{year}-07-15")]
+    text, muted, grid, surface = "#0b0b0b", "#52514e", "#e4e3df", "#fcfcfb"
+
+    fig, axes = plt.subplots(2, 1, figsize=(11, 7.5), sharey=True, facecolor=surface)
+    for ax, (label, a, b) in zip(axes, weeks):
+        w = t[(t.index >= pd.Timestamp(a, tz="UTC")) & (t.index < pd.Timestamp(b, tz="UTC"))]
+        ax.set_facecolor(surface)
+        for col, name, color in series:
+            ax.plot(w.index, w[col], color=color, lw=2, label=name)
+        # direct labels at the line ends, pushed apart so they don't collide
+        ends = sorted(((w[col].dropna().iloc[-1], name) for col, name, _ in series), reverse=True)
+        min_gap, y_prev = 700.0, np.inf
+        for y, name in ends:
+            y = min(y, y_prev - min_gap)
+            ax.annotate(name, (w.index[-1], y), xytext=(6, 0), textcoords="offset points",
+                        va="center", fontsize=9, color=text)
+            y_prev = y
+        ax.set_title(f"{label}: {pd.Timestamp(a):%a %d %b} - {pd.Timestamp(b) - pd.Timedelta('1D'):%a %d %b %Y}",
+                     loc="left", fontsize=11, color=text)
+        ax.grid(axis="y", color=grid, lw=0.8)
+        ax.set_axisbelow(True)
+        for s in ("top", "right"):
+            ax.spines[s].set_visible(False)
+        for s in ("left", "bottom"):
+            ax.spines[s].set_color(grid)
+        ax.tick_params(colors=muted, labelsize=9)
+        ax.xaxis.set_major_formatter(matplotlib.dates.DateFormatter("%a %d"))
+        ax.set_ylabel("MW", color=muted)
+        ax.set_xlim(w.index.min(), w.index.max() + pd.Timedelta("18h"))
+    axes[0].set_ylim(bottom=0)
+    axes[0].legend(loc="upper left", bbox_to_anchor=(0, 1.2), ncol=4, frameon=False, fontsize=9, labelcolor=text)
+    fig.suptitle(f"Finland hourly power, one winter and one summer week ({year}, UTC)", x=0.06, ha="left",
+                 fontsize=13, color=text, y=0.995)
+    fig.text(0.06, 0.005, "Residual load = consumption - wind - solar. Source Fingrid / data.fingrid.fi, license CC 4.0 BY.",
+             fontsize=8, color=muted)
+    fig.tight_layout(rect=(0, 0.02, 1, 0.97))
+
+    FIGURES_DIR.mkdir(parents=True, exist_ok=True)
+    path = FIGURES_DIR / f"sanity_weeks_{year}.png"
+    fig.savefig(path, dpi=150, facecolor=surface)
+    plt.close(fig)
+    return path
+
+
+def main() -> None:
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--year", type=int, required=True)
+    args = p.parse_args()
+
+    t = build(args.year)
+    PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+    out = PROCESSED_DIR / f"hourly_{args.year}.parquet"
+    t.to_parquet(out)
+    summarize(t)
+    print(f"\nWrote {out}")
+    print(f"Wrote {plot_weeks(t, args.year)}")
+
+
+if __name__ == "__main__":
+    main()

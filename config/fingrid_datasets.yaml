@@ -1,0 +1,80 @@
+# Fingrid Open Data datasets used by the tool.
+# Source Fingrid / data.fingrid.fi, license CC 4.0 BY.
+# IDs, units and descriptions checked against the catalog (api/datasets/{id}) on 2026-10-09.
+# All values are average power over the interval (MW = MWh/h); hourly output is the mean.
+#
+# fetch_all: false -> skipped by `--all` (fetch explicitly with --name and a date range).
+
+datasets:
+  consumption:
+    id: 124
+    name: Electricity consumption in Finland
+    notes: Measured; Fingrid computes it as production + import - export. 15 min (hourly before 2023-06-13).
+  production:
+    id: 74
+    name: Electricity production in Finland
+    notes: Measured; small unmeasured part estimated. 15 min (hourly before 2023-06-13).
+  wind:
+    id: 75
+    name: Wind power generation - 15 min data
+    notes: Measured; ~2% of capacity (non-measured parks) estimated. 15 min (hourly before 2023-06-13).
+  solar:
+    id: 248
+    name: Solar power generation forecast - updated every 15 minutes
+    notes: >
+      FORECAST, not a measurement. Modelled from weather forecasts and Fingrid's estimates of
+      installed PV capacity and location; only large parks supply measurements. Most small-scale PV
+      is behind the meter. 15 min (hourly before 2023-05-31).
+  solar_capacity:
+    id: 267
+    name: Total production capacity used in the solar power forecast
+    notes: Installed PV capacity (grid-scale + small-scale) assumed in dataset 248. Not an official statistic.
+  nuclear:
+    id: 188
+    name: Nuclear power production - real-time data
+    notes: REAL-TIME 3-min data; no measured 15-min/hourly dataset exists.
+  hydro:
+    id: 191
+    name: Hydro power production - real-time data
+    notes: REAL-TIME 3-min data; no measured 15-min/hourly dataset exists.
+
+  # Measured cross-border flows. Fingrid sign: positive = flow OUT of Finland.
+  flow_ee:
+    id: 55
+    name: Transmission of electricity between Finland and Estonia - power measured every 15 minutes
+  flow_no:
+    id: 57
+    name: Transmission of electricity between Finland and Norway - measured every 15 minutes
+  flow_ru:
+    id: 58
+    name: Transmission of electricity between Finland and Russia - measured every 15 minutes
+    notes: Updates ended 2024-08-12 (no trade since 2022-05). Treated as 0 where missing.
+    missing_as_zero: true
+  flow_se1:
+    id: 60
+    name: Transmission of electricity between Finland and Northern Sweden - power measured every 15 minutes
+  flow_se3:
+    id: 61
+    name: Transmission of electricity between Finland and Central Sweden - power measured every 15 minutes
+  flow_ax:
+    id: 280
+    name: Transmission of electricity between Finland and Aland - measured hourly data
+    notes: >
+      NOT in net_import. 2024 balance check: flows are ~0 MW (std 0.9 MW, |value| > 0.5 MW in <1% of
+      hours), adding it does not reduce the consumption - (production + net_import) mismatch, and
+      it has 959 missing hours (Apr-Jun 2024) that would leave gaps. Still fetched so the check can
+      be repeated for other years.
+
+  # Cross-check only (fetched for Jan 2024): real-time net export. Sign: positive = net EXPORT.
+  net_export_rt:
+    id: 194
+    name: Net import/export of electricity - real-time data
+    notes: REAL-TIME 3-min data. Despite its name, positive = net export (verified against 124 - 74).
+    fetch_all: false
+
+# Series computed from the datasets above. net_import: positive = net import INTO Finland.
+# 2024 check: consumption - (production + net_import) has mean 0.4 MW, mean |.| 22 MW.
+derived:
+  net_import:
+    sum_of: [flow_ee, flow_no, flow_ru, flow_se1, flow_se3]
+    sign: -1
