@@ -1,0 +1,15 @@
+# Known bad data in the source series, applied by src/process/build_hourly_table.py.
+# Hours listed here stay in the table with flag "suspect" and are excluded from model fitting.
+# start/end are hour-start labels in UTC, both INCLUSIVE.
+# Derived series (other, residual_load) also inherit "suspect" from their inputs.
+
+suspect:
+  - series: [wind, production, consumption, residual_load]
+    start: 2024-07-12T22:00Z
+    end: 2024-07-13T00:00Z
+    reason: >
+      Fingrid wind (75) jumps from ~1,100 to ~2,750 MW from 22:45 to 00:15 UTC while ERA5
+      100 m wind speed stays at 4-5 m/s; production and consumption jump by the same amount,
+      net import does not. Coincides with the real-time outage that blanked nuclear (188)
+      and hydro (191) 2024-07-12 18:00 - 2024-07-13 08:00. The 00:00 hour is included
+      because its first 15-min interval (1,301 MW) is still elevated.

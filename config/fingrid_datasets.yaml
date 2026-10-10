@@ -29,6 +29,15 @@ datasets:
     id: 267
     name: Total production capacity used in the solar power forecast
     notes: Installed PV capacity (grid-scale + small-scale) assumed in dataset 248. Not an official statistic.
+  wind_capacity:
+    id: 268
+    name: Total production capacity used in the wind power forecast
+    notes: >
+      Fingrid's FORECAST capacity, NOT official installed capacity. Updated manually ~weekly
+      and revised retroactively from actual production, so it tracks capacity that is actually
+      producing (2024: 6,715 -> 8,224 MW; Renewables Finland official end-2024: 8,358 MW).
+      Used as the denominator for historical wind capacity factors / calibration only.
+      Future-year projections use Renewables Finland's official figures instead.
   nuclear:
     id: 188
     name: Nuclear power production - real-time data

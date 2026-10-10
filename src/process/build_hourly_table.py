@@ -10,8 +10,9 @@ Columns (power in MW = MWh/h, index = hour start, UTC):
                net_import (+ = import), other (= production - wind - solar - nuclear - hydro),
                solar_capacity (MW assumed by Fingrid, forward-filled),
                wind_capacity (MW; only if a source is configured, see WIND_CAPACITY_NAME)
-  flags        flag_<series>: "ok" | "filled" (gap <= MAX_GAP_H, linear interpolation) | "missing"
-               Derived series take the worst flag of their inputs.
+  flags        flag_<series>: "ok" | "filled" (gap <= MAX_GAP_H, linear interpolation)
+               | "suspect" (known bad data, config/data_issues.yaml; keep but exclude from
+               model fitting) | "missing". Derived series take the worst flag of their inputs.
   weather      ws100_<point> per wind point, ws100_mean (wind points),
                temp_mean (city points, C), ghi_mean (shortwave, city points, W/m2)
   derived      residual_load = consumption - wind - solar, wind_cf, solar_cf
@@ -36,21 +37,23 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import yaml
 
 from src.fetch import fingrid, weather
 
 MAX_GAP_H = 3
 LOCAL_TZ = "Europe/Helsinki"
 FINGRID_SERIES = ["consumption", "production", "wind", "solar", "nuclear", "hydro", "net_import"]
-# Short name in config/fingrid_datasets.yaml for installed wind capacity. Not set until a
-# source is confirmed; wind_capacity and wind_cf stay empty until then.
-WIND_CAPACITY_NAME: str | None = None
+# Short name in config/fingrid_datasets.yaml for wind capacity (Fingrid 268: forecast
+# capacity, i.e. capacity actually producing; see the config notes).
+WIND_CAPACITY_NAME: str | None = "wind_capacity"
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+ISSUES_PATH = REPO_ROOT / "config" / "data_issues.yaml"
 PROCESSED_DIR = REPO_ROOT / "data" / "processed"
 FIGURES_DIR = REPO_ROOT / "outputs" / "figures"
 
-FLAG_ORDER = ["ok", "filled", "missing"]
+FLAG_ORDER = ["ok", "filled", "suspect", "missing"]  # increasing severity
 
 
 def fill_short_gaps(s: pd.Series, max_gap: int = MAX_GAP_H) -> tuple[pd.Series, pd.Series]:
@@ -70,6 +73,20 @@ def worst_flag(*flags: pd.Series) -> pd.Series:
     return rank.map(dict(enumerate(FLAG_ORDER)))
 
 
+def load_suspects(path: Path = ISSUES_PATH) -> list[dict]:
+    with open(path, encoding="utf-8") as f:
+        return (yaml.safe_load(f) or {}).get("suspect", [])
+
+
+def mark_suspect(t: pd.DataFrame, suspects: list[dict], columns: list[str]) -> None:
+    """Set flag_<col> to "suspect" (unless already missing) for listed hours, in place."""
+    for s in suspects:
+        hours = (t.index >= pd.Timestamp(s["start"])) & (t.index <= pd.Timestamp(s["end"]))
+        for col in set(s["series"]) & set(columns):
+            flag = t[f"flag_{col}"]
+            t[f"flag_{col}"] = flag.where(~hours | (flag == "missing"), "suspect")
+
+
 def build(year: int) -> pd.DataFrame:
     start, end = f"{year}-01-01", f"{year + 1}-01-01"
     idx = pd.date_range(start, end, freq="1h", inclusive="left", tz="UTC", name="time_utc")
@@ -81,6 +98,9 @@ def build(year: int) -> pd.DataFrame:
     # Fingrid series with short-gap filling
     for name in FINGRID_SERIES:
         t[name], t[f"flag_{name}"] = fill_short_gaps(fg(name))
+    # known bad data: base series first so derived series inherit the flag
+    suspects = load_suspects()
+    mark_suspect(t, suspects, FINGRID_SERIES)
     parts = ["production", "wind", "solar", "nuclear", "hydro"]
     t["other"] = t["production"] - t["wind"] - t["solar"] - t["nuclear"] - t["hydro"]
     t["flag_other"] = worst_flag(*(t[f"flag_{p}"] for p in parts))
@@ -109,6 +129,7 @@ def build(year: int) -> pd.DataFrame:
     # Derived
     t["residual_load"] = t["consumption"] - t["wind"] - t["solar"]
     t["flag_residual_load"] = worst_flag(t["flag_consumption"], t["flag_wind"], t["flag_solar"])
+    mark_suspect(t, suspects, ["other", "residual_load"])
     t["wind_cf"] = t["wind"] / t["wind_capacity"]
     t["solar_cf"] = t["solar"] / t["solar_capacity"]
 
