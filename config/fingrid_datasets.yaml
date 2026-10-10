@@ -25,6 +25,21 @@ datasets:
       FORECAST, not a measurement. Modelled from weather forecasts and Fingrid's estimates of
       installed PV capacity and location; only large parks supply measurements. Most small-scale PV
       is behind the meter. 15 min (hourly before 2023-05-31).
+  solar_dayahead:
+    id: 247
+    name: Solar power generation forecast - updated once a day
+    notes: >
+      Day-ahead FORECAST, issued daily at 12:00 EET for the next day. Used only to check whether
+      the 10-11 UTC dip in 248 is real. 15 min from 2024-03-28 (hourly before).
+  solar_surplus_small:
+    id: 362
+    name: Small-scale electricity surplus production by production type at accounting points in Finnish distribution networks
+    record_filter: {ProductionType: AV06}  # AV06 = solar; one record per production type per hour
+    scale: 0.001  # kWh per hour -> MW
+    notes: >
+      MEASURED (Datahub metering), but only the SURPLUS fed to the grid by small-scale producers
+      after their own consumption, not total PV output. Data from 2023-08-01, ~4 day delay,
+      estimated readings corrected within ~11 days. Used as a shape check for 248.
   solar_capacity:
     id: 267
     name: Total production capacity used in the solar power forecast

@@ -97,8 +97,14 @@ class FingridClient:
             raise RuntimeError(f"Fingrid HTTP {r.status_code}: {r.text[:300]}")
         raise RuntimeError(f"Fingrid request failed after {MAX_RETRIES} attempts: {params}")
 
-    def fetch_range(self, dataset_id: int, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
-        """All records with start <= startTime < end, following pagination."""
+    def fetch_range(
+        self, dataset_id: int, start: pd.Timestamp, end: pd.Timestamp, record_filter: dict | None = None
+    ) -> pd.DataFrame:
+        """All records with start <= startTime < end, following pagination.
+
+        record_filter: keep only records whose additionalJson matches every key/value
+        (for datasets with several series per timestamp, e.g. 362 by ProductionType).
+        """
         records: list[dict] = []
         page = 1
         while True:
@@ -108,6 +114,9 @@ class FingridClient:
             if not next_page:
                 break
             page = next_page
+        if record_filter:
+            records = [r for r in records
+                       if all(str((r.get("additionalJson") or {}).get(k)) == str(v) for k, v in record_filter.items())]
         return _records_to_frame(records)
 
 
@@ -117,14 +126,16 @@ def fetch_dataset(
     end: str | pd.Timestamp,
     client: FingridClient | None = None,
     refresh: bool = False,
+    record_filter: dict | None = None,
 ) -> pd.DataFrame:
     """Fetch [start, end) at native resolution, one cached Parquet file per month.
 
-    Completed months are cached under data/raw/fingrid/<id>/YYYY-MM.parquet and
+    Completed months are cached under data/raw/fingrid/<id>[_<filter>]/YYYY-MM.parquet and
     skipped on later runs. Months that are not yet over are never cached.
     """
     start, end = _utc(start), _utc(end)
-    cache_dir = RAW_DIR / str(dataset_id)
+    suffix = "".join(f"_{k}-{v}" for k, v in sorted((record_filter or {}).items()))
+    cache_dir = RAW_DIR / f"{dataset_id}{suffix}"
     cache_dir.mkdir(parents=True, exist_ok=True)
     now = pd.Timestamp.now(tz="UTC")
 
@@ -137,7 +148,7 @@ def fetch_dataset(
         else:
             client = client or FingridClient()
             log.info("Fetching dataset %d for %s", dataset_id, f"{m_start:%Y-%m}")
-            df = client.fetch_range(dataset_id, m_start, min(m_end, now))
+            df = client.fetch_range(dataset_id, m_start, min(m_end, now), record_filter)
             if m_end <= now:
                 df.to_parquet(path)
         frames.append(df)
@@ -242,14 +253,20 @@ def build_hourly(
     client: FingridClient | None = None,
     refresh: bool = False,
     missing_as_zero: bool = False,
+    record_filter: dict | None = None,
+    scale: float = 1.0,
 ) -> pd.DataFrame:
     """Fetch a dataset and return it hourly on the full [start, end) UTC index.
 
     missing_as_zero: hours without data get value 0 and count as complete (for
     discontinued links such as FI-RU).
+    record_filter: see FingridClient.fetch_range.
+    scale: multiply values (e.g. 0.001 for kWh per hour -> MW).
     """
     start, end = _utc(start), _utc(end)
-    hourly = to_hourly(fetch_dataset(dataset_id, start, end, client=client, refresh=refresh))
+    raw = fetch_dataset(dataset_id, start, end, client=client, refresh=refresh, record_filter=record_filter)
+    hourly = to_hourly(raw)
+    hourly["value"] = hourly["value"] * scale
     idx = pd.date_range(start, end, freq="1h", inclusive="left", name="time_utc")
     hourly = hourly.reindex(idx)
     hourly["n_intervals"] = hourly["n_intervals"].fillna(0).astype(int)
@@ -285,7 +302,8 @@ def fetch_named(names: list[str], start: str, end: str, refresh: bool = False) -
     for name in names:
         ds = datasets[name]
         log.info("== %s (dataset %d)", name, ds["id"])
-        hourly = build_hourly(ds["id"], start, end, client, refresh, ds.get("missing_as_zero", False))
+        hourly = build_hourly(ds["id"], start, end, client, refresh, ds.get("missing_as_zero", False),
+                              ds.get("record_filter"), ds.get("scale", 1.0))
         _write(hourly, hourly_path(name, start, end))
         built[name] = hourly
 

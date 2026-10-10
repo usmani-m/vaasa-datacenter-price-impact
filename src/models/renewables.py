@@ -10,14 +10,19 @@ Wind (target: wind_cf = Fingrid wind 75 / Fingrid forecast capacity 268)
   Validation: leave-one-month-out CV (train on 11 months, predict the 12th).
   Outlier check: hours where |actual - out-of-fold prediction of the best interpretable model|
   exceeds OUTLIER_K robust standard deviations of the residuals. Report only.
+  Ramp check: unexplained hour-to-hour changes (jumps) and up-down pairs (spikes). Report only.
 
-Solar (target: Fingrid solar forecast 248; see config notes)
-  pvlib per city point (equal capacity shares), fixed tilt/azimuth, PVWatts DC with SAPM cell
-  temperature -> raw output per MW. One scale factor is fitted on DAILY totals against 248
-  (avoids its intra-day forecast artefact); it absorbs system losses, snow, shading,
-  orientation mix and the capacity estimate.
+Solar
+  Baseline profile: solar_cf = Fingrid 248 / 267 (from the hourly table). 248 is itself a
+  forecast-based estimate and has a 09-12 UTC timing artefact (see src/process/solar_artefact.py).
+  Alternative profile: pvlib per city point (equal capacity shares), fixed tilt/azimuth, PVWatts
+  DC with SAPM cell temperature -> raw output per MW. One scale factor is fitted on DAILY totals
+  against 248 (avoids its intra-day artefact); it absorbs system losses, snow, shading,
+  orientation mix and the capacity estimate. Both profiles are written to
+  data/processed/solar_profiles_<year>.parquet.
 
-Fitting uses only hours whose flags are "ok" or "filled" (suspect / missing excluded).
+Wind fitting uses only hours whose flags are "ok" or "filled" (suspect / missing excluded) and
+that are not labelled candidate_curtailment (config/data_issues.yaml).
 
 Usage:
     python -m src.models.renewables --year 2024
@@ -49,9 +54,13 @@ FIGURES_DIR = REPO_ROOT / "outputs" / "figures"
 
 FIT_FLAGS = ["ok", "filled"]
 OUTLIER_K = 5.0  # threshold in robust standard deviations; see outlier_report()
+RAMP_K = 8.0  # single unexplained ramp, robust sigmas; see ramp_z()
+SPIKE_K = 5.0  # both legs of an up-down (or down-up) spike; see spike_hours()
 
-# Solar assumptions (stated in the report; the scale factor absorbs most of their error)
-SOLAR_TILT_DEG = 35.0
+# Solar assumptions (stated in the report; the scale factor absorbs most of their error).
+# 15 deg: flatter than the south-facing optimum, closer to typical Finnish rooftops; fits
+# Fingrid 248 daily totals better than 35 deg (2024 daily-total R2: 15 deg 0.939, 35 deg 0.879).
+SOLAR_TILT_DEG = 15.0
 SOLAR_AZIMUTH_DEG = 180.0  # south
 GAMMA_PDC = -0.004  # 1/K, typical crystalline Si
 SAPM_MOUNT = "open_rack_glass_polymer"
@@ -211,6 +220,29 @@ def outlier_report(t: pd.DataFrame, resid: pd.Series, fit_mask: pd.Series) -> tu
     return flagged, sigma, threshold
 
 
+def ramp_z(t: pd.DataFrame, pred: pd.Series, fit_mask: pd.Series) -> tuple[pd.Series, float]:
+    """Hour-to-hour change in actual wind_cf not explained by the change in prediction, in robust sigmas.
+
+    A short data spike (e.g. 2024-07-12 23:00) barely moves the level residual but shows up as a
+    large unexplained ramp up followed by one down.
+    """
+    ramp = t["wind_cf"].diff() - pred.diff()
+    ok = fit_mask & fit_mask.shift(1, fill_value=False)
+    r = ramp[ok]
+    sigma = 1.4826 * (r - r.median()).abs().median()
+    return ramp / sigma, float(sigma)
+
+
+def spike_hours(rz: pd.Series) -> pd.Series:
+    """Hour t is a spike if the ramp into t and the ramp out of t are both > SPIKE_K sigma, opposite sign.
+
+    Requiring both legs makes this far more specific than a single-ramp threshold, so SPIKE_K can
+    be lower than RAMP_K.
+    """
+    nxt = rz.shift(-1)
+    return (rz.abs() > SPIKE_K) & (nxt.abs() > SPIKE_K) & (np.sign(rz) != np.sign(nxt))
+
+
 def _style(ax):
     ax.set_facecolor(C["surface"])
     ax.grid(axis="y", color=C["grid"], lw=0.8)
@@ -242,7 +274,7 @@ def plot_wind_curve(t, fit_mask, flagged, logistic_model, year) -> Path:
     excl = ~fit_mask
     if excl.any():
         ax.scatter(t.loc[excl, "ws100_mean"], t.loc[excl, "wind_cf"], s=30, marker="x", color=C["muted"],
-                   lw=1.2, label="Excluded (suspect / missing)")
+                   lw=1.2, label="Excluded (suspect / missing / candidate curtailment)")
     v = np.linspace(0, t["ws100_mean"].max() + 0.5, 300)
     ax.plot(v, logistic(v, *logistic_model.params), color=C["orange"], lw=2.5, label="Fitted logistic curve")
     ax.set_xlabel("Mean 100 m wind speed over the wind points (m/s, ERA5)", color=C["muted"])
@@ -320,8 +352,11 @@ def run(year: int) -> None:
     t = pd.read_parquet(PROCESSED_DIR / f"hourly_{year}.parquet")
     points = list(weather.load_locations()["wind"])
     fit_mask = (t["flag_wind"].isin(FIT_FLAGS) & t["flag_wind_capacity"].isin(FIT_FLAGS)
+                & ~t["candidate_curtailment"]
                 & t["wind_cf"].notna() & t[[f"ws100_{p}" for p in points]].notna().all(axis=1))
-    print(f"\n=== Wind: {int(fit_mask.sum())} fit hours, {int((~fit_mask).sum())} excluded (suspect/missing) ===")
+    print(f"\n=== Wind: {int(fit_mask.sum())} fit hours, {int((~fit_mask).sum())} excluded "
+          f"(suspect/missing: {int((~t['flag_wind'].isin(FIT_FLAGS)).sum())}, "
+          f"candidate curtailment: {int(t['candidate_curtailment'].sum())}) ===")
 
     makers = {"logistic": LogisticModel, "per_point": lambda: PerPointModel(points), "gbm": lambda: GBMModel(points)}
     oof = {k: leave_one_month_out(mk, t, fit_mask) for k, mk in makers.items()}
@@ -355,7 +390,8 @@ def run(year: int) -> None:
           + ", ".join(f"{(r_fit.abs() > k * sigma).sum()}" for k in (3, 4, 5, 6)))
     print(f"threshold = {OUTLIER_K:g} x robust sigma = {threshold:.3f} cf "
           f"(~{threshold * t['wind_capacity'].mean():.0f} MW at mean capacity)")
-    print(f"flagged hours: {int(flagged.sum())} (of which already suspect/missing: {int((flagged & ~fit_mask).sum())})")
+    print(f"flagged hours: {int(flagged.sum())} (of which already excluded from fit: {int((flagged & ~fit_mask).sum())}, "
+          f"candidate curtailment: {int((flagged & t['candidate_curtailment']).sum())})")
     top = pd.DataFrame({"actual_cf": t["wind_cf"], "pred_cf": oof[best], "resid": resid,
                         "resid_MW": resid * t["wind_capacity"], "ws100_mean": t["ws100_mean"],
                         "temp_mean": t["temp_mean"], "flag_wind": t["flag_wind"]})[flagged]
@@ -366,6 +402,18 @@ def run(year: int) -> None:
         spans = f.index.to_series().groupby(runs.values).agg(["first", "last", "size"])
         print(f"\nFlagged hours form {len(spans)} episodes; longest:")
         print(spans.sort_values("size", ascending=False).head(8).to_string())
+
+    rz, rsigma = ramp_z(t, oof[best], fit_mask)
+    jumps = rz.abs() > RAMP_K
+    spikes = spike_hours(rz)
+    print(f"\n=== Ramp check (report only; hour-to-hour change in actual minus change in prediction) ===")
+    print(f"robust sigma = {rsigma:.4f} cf/h; |z| > 5/6/8/10: "
+          + ", ".join(f"{int((rz[fit_mask].abs() > k).sum())}" for k in (5, 6, 8, 10)))
+    print(f"jumps |z| > {RAMP_K:g}: {int(jumps.sum())} h; spikes (opposite-sign ramps > {SPIKE_K:g} sigma in "
+          f"consecutive hours): {int(spikes.sum())} h")
+    rep = pd.DataFrame({"ramp_z": rz, "actual_cf": t["wind_cf"], "pred_cf": oof[best], "flag_wind": t["flag_wind"],
+                        "jump": jumps, "spike": spikes})[jumps | spikes]
+    print(rep.round(3).to_string())
 
     # solar
     raw = solar_raw_per_mw(t, year)
@@ -397,6 +445,10 @@ def run(year: int) -> None:
             "cv_leave_one_month_out": overall.round(5).to_dict(orient="index"),
             "outlier_check": {"model": best, "k": OUTLIER_K, "robust_sigma": float(sigma),
                               "threshold_cf": float(threshold), "flagged_hours": int(flagged.sum())},
+            "ramp_check": {"robust_sigma": rsigma, "jump_k": RAMP_K, "spike_k": SPIKE_K,
+                           "jump_hours": int(jumps.sum()), "spike_hours": int(spikes.sum())},
+            "excluded_from_fit": {"suspect_or_missing": int((~t["flag_wind"].isin(FIT_FLAGS)).sum()),
+                                  "candidate_curtailment": int(t["candidate_curtailment"].sum())},
         },
         "solar": {
             "target": "Fingrid 248 (forecast series), daily totals",
@@ -411,6 +463,15 @@ def run(year: int) -> None:
     path = MODELS_DIR / f"renewables_{year}.json"
     path.write_text(json.dumps(out, indent=2))
     print(f"\nWrote {path}")
+
+    # Solar profiles per MW installed, for the scenario engine (config/scenarios.yaml: solar.profile)
+    profiles = pd.DataFrame({
+        "solar_cf_fingrid": t["solar_cf"],  # baseline: Fingrid 248 / 267 (forward-filled)
+        "solar_cf_pvlib": sol["scale"] * raw,  # alternative: pvlib, weather-driven
+    })
+    ppath = PROCESSED_DIR / f"solar_profiles_{year}.parquet"
+    profiles.to_parquet(ppath)
+    print(f"Wrote {ppath}  (annual mean cf: " + ", ".join(f"{c} {v:.4f}" for c, v in profiles.mean().items()) + ")")
     for p in (plot_wind_curve(t, fit_mask, flagged, full["logistic"], year), plot_wind_weeks(t, oof, year),
               plot_solar_monthly(d_act, d_pred, year)):
         print(f"Wrote {p}")

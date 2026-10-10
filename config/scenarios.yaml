@@ -1,0 +1,21 @@
+# Scenario assumptions for the scenario engine (src/scenarios/engine.py, not built yet).
+# Everything here is an ASSUMPTION, not data. Data center assumptions (MW, load factor,
+# ramp-up, PPA) will be added together with the engine.
+
+solar:
+  # Hourly solar output per MW installed (capacity factor profile).
+  #   fingrid: solar_cf = Fingrid 248 / 267 (baseline). 248 is a forecast-based estimate, not a
+  #            measurement, with a 09-12 UTC timing artefact (correction proposed, not applied).
+  #   pvlib:   weather-driven pvlib model, 15 deg tilt, south, scaled to 248 daily totals
+  #            (src/models/renewables.py). Works for any weather year.
+  # Both are in data/processed/solar_profiles_<year>.parquet.
+  profile: fingrid          # fingrid | pvlib
+
+  # Installed solar capacity.
+  #   baseline: Fingrid 267 (capacity assumed in Fingrid's forecast; an estimate, not an official
+  #             statistic). For future years: official figures, to be added with the projections.
+  #   low:      a lower capacity case for sensitivity. NOT YET DEFINED: needs a value and source.
+  capacity_case: baseline   # baseline | low
+  capacity_cases:
+    baseline: {source: fingrid_267}
+    low: {multiplier: null, source: null}

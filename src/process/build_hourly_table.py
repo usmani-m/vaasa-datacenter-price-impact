@@ -15,7 +15,10 @@ Columns (power in MW = MWh/h, index = hour start, UTC):
                model fitting) | "missing". Derived series take the worst flag of their inputs.
   weather      ws100_<point> per wind point, ws100_mean (wind points),
                temp_mean (city points, C), ghi_mean (shortwave, city points, W/m2)
-  derived      residual_load = consumption - wind - solar, wind_cf, solar_cf
+  derived      residual_load = consumption - wind - solar, wind_cf = wind / wind_capacity,
+               solar_cf = solar / solar_capacity (baseline solar profile; Fingrid 248 / 267)
+  issues       candidate_curtailment: True in likely curtailment hours (config/data_issues.yaml);
+               excluded from wind fitting only
   calendar     hour_local, weekday_local (0 = Mon), month_local, is_holiday
                (Europe/Helsinki local time; holidays from the `holidays` package, incl.
                Midsummer Eve and Christmas Eve)
@@ -73,15 +76,23 @@ def worst_flag(*flags: pd.Series) -> pd.Series:
     return rank.map(dict(enumerate(FLAG_ORDER)))
 
 
-def load_suspects(path: Path = ISSUES_PATH) -> list[dict]:
+def load_issues(kind: str, path: Path = ISSUES_PATH) -> list[dict]:
     with open(path, encoding="utf-8") as f:
-        return (yaml.safe_load(f) or {}).get("suspect", [])
+        return (yaml.safe_load(f) or {}).get(kind, [])
+
+
+def in_periods(index: pd.DatetimeIndex, periods: list[dict]) -> np.ndarray:
+    """True for hours inside any {start, end} period (both inclusive, hour-start labels)."""
+    mask = np.zeros(len(index), dtype=bool)
+    for p in periods:
+        mask |= (index >= pd.Timestamp(p["start"])) & (index <= pd.Timestamp(p["end"]))
+    return mask
 
 
 def mark_suspect(t: pd.DataFrame, suspects: list[dict], columns: list[str]) -> None:
     """Set flag_<col> to "suspect" (unless already missing) for listed hours, in place."""
     for s in suspects:
-        hours = (t.index >= pd.Timestamp(s["start"])) & (t.index <= pd.Timestamp(s["end"]))
+        hours = in_periods(t.index, [s])
         for col in set(s["series"]) & set(columns):
             flag = t[f"flag_{col}"]
             t[f"flag_{col}"] = flag.where(~hours | (flag == "missing"), "suspect")
@@ -99,7 +110,7 @@ def build(year: int) -> pd.DataFrame:
     for name in FINGRID_SERIES:
         t[name], t[f"flag_{name}"] = fill_short_gaps(fg(name))
     # known bad data: base series first so derived series inherit the flag
-    suspects = load_suspects()
+    suspects = load_issues("suspect")
     mark_suspect(t, suspects, FINGRID_SERIES)
     parts = ["production", "wind", "solar", "nuclear", "hydro"]
     t["other"] = t["production"] - t["wind"] - t["solar"] - t["nuclear"] - t["hydro"]
@@ -140,6 +151,9 @@ def build(year: int) -> pd.DataFrame:
     t["weekday_local"] = local.weekday
     t["month_local"] = local.month
     t["is_holiday"] = [d in fi_holidays for d in local.date]
+
+    # likely curtailment: data kept and flags unchanged, excluded from wind fitting only
+    t["candidate_curtailment"] = in_periods(idx, load_issues("candidate_curtailment"))
 
     t["price_eur_mwh"] = np.nan  # placeholder: ENTSO-E day-ahead price
 
