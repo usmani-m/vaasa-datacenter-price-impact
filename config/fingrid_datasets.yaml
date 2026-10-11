@@ -72,8 +72,12 @@ datasets:
   flow_ru:
     id: 58
     name: Transmission of electricity between Finland and Russia - measured every 15 minutes
-    notes: Updates ended 2024-08-12 (no trade since 2022-05). Treated as 0 where missing.
-    missing_as_zero: true
+    notes: >
+      Real imports (2019-2021: 3-9 TWh/yr, up to ~11% of consumption) until trade stopped; last
+      nonzero hour 2022-05-14 12:00 UTC, zeros after that, series ended 2024-08-12 08:45 UTC.
+      Missing hours are 0 only from the end of trade; earlier gaps stay missing (filling them
+      with 0 would understate net import in 2019-2022).
+    missing_as_zero_from: 2022-05-14T13:00Z
   flow_se1:
     id: 60
     name: Transmission of electricity between Finland and Northern Sweden - power measured every 15 minutes

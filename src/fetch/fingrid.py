@@ -41,6 +41,7 @@ MAX_RETRIES = 6
 TIMEOUT_S = 60
 SAMPLE_PERIOD_MIN = 3  # Fingrid real-time series
 SAMPLE_PERIOD = f"{SAMPLE_PERIOD_MIN}min"
+SNAP_MIN = 10  # full-hour records starting this close to the hour are snapped onto it if needed
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = REPO_ROOT / "config" / "fingrid_datasets.yaml"
@@ -168,7 +169,8 @@ def to_hourly(df: pd.DataFrame) -> pd.DataFrame:
       averaged per 3-min slot, then per hour; 20 slots make a complete hour.
     - 15-min intervals: 4 make a complete hour.
     - full-hour records: win over the others (Fingrid publishes both hourly and
-      15-min records at the 2023-06-13 resolution switch).
+      15-min records at the 2023-06-13 resolution switch). Records starting within SNAP_MIN
+      minutes of the hour are snapped onto it when there is no exact on-the-hour record.
     `n_intervals` counts the intervals (or slots) used; `complete` is False where an
     hour has fewer than its resolution implies (or none at all).
     """
@@ -188,7 +190,14 @@ def to_hourly(df: pd.DataFrame) -> pd.DataFrame:
         expected = (60 / interval_min[is_sub]).resample("1h").max()
         parts.append(pd.DataFrame({"value": g.mean(), "n_intervals": g.count(), "expected": expected}))
     if len(full):
-        full_h = full["value"][full.index == full.index.floor("1h")]
+        exact = full["value"][full.index == full.index.floor("1h")]
+        # Some pre-2023 hourly series also hold copies shifted by a few minutes (start :05 or :55).
+        # Where the on-the-hour record is missing, snap a near one (<= SNAP_MIN) onto the hour.
+        offset = (full.index - full.index.round("1h")).to_series(index=full.index).abs()
+        near = full["value"][(offset > pd.Timedelta(0)) & (offset <= pd.Timedelta(minutes=SNAP_MIN))]
+        near.index = near.index.round("1h")
+        near = near[~near.index.duplicated(keep="first") & ~near.index.isin(exact.index)]
+        full_h = pd.concat([exact, near]).sort_index()
         parts.append(pd.DataFrame({"value": full_h, "n_intervals": 1, "expected": 1}))
 
     hourly = pd.concat([p[p["n_intervals"] > 0] for p in parts])
@@ -252,14 +261,14 @@ def build_hourly(
     end: str | pd.Timestamp,
     client: FingridClient | None = None,
     refresh: bool = False,
-    missing_as_zero: bool = False,
+    missing_as_zero_from: str | None = None,
     record_filter: dict | None = None,
     scale: float = 1.0,
 ) -> pd.DataFrame:
     """Fetch a dataset and return it hourly on the full [start, end) UTC index.
 
-    missing_as_zero: hours without data get value 0 and count as complete (for
-    discontinued links such as FI-RU).
+    missing_as_zero_from: hours without data AT OR AFTER this UTC time get value 0 and count
+    as complete (for discontinued links such as FI-RU). Earlier gaps stay missing.
     record_filter: see FingridClient.fetch_range.
     scale: multiply values (e.g. 0.001 for kWh per hour -> MW).
     """
@@ -271,8 +280,8 @@ def build_hourly(
     hourly = hourly.reindex(idx)
     hourly["n_intervals"] = hourly["n_intervals"].fillna(0).astype(int)
     hourly["complete"] = hourly["complete"].fillna(False).astype(bool)
-    if missing_as_zero:
-        empty = hourly["value"].isna()
+    if missing_as_zero_from:
+        empty = hourly["value"].isna() & (hourly.index >= _utc(missing_as_zero_from))
         hourly.loc[empty, "value"] = 0.0
         hourly.loc[empty, "complete"] = True
     return hourly
@@ -302,7 +311,7 @@ def fetch_named(names: list[str], start: str, end: str, refresh: bool = False) -
     for name in names:
         ds = datasets[name]
         log.info("== %s (dataset %d)", name, ds["id"])
-        hourly = build_hourly(ds["id"], start, end, client, refresh, ds.get("missing_as_zero", False),
+        hourly = build_hourly(ds["id"], start, end, client, refresh, ds.get("missing_as_zero_from"),
                               ds.get("record_filter"), ds.get("scale", 1.0))
         _write(hourly, hourly_path(name, start, end))
         built[name] = hourly

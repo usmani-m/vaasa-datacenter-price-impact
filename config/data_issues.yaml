@@ -5,6 +5,10 @@
 # candidate_curtailment: data probably fine, but output was likely held back (e.g. at negative
 #                        prices). Boolean column candidate_curtailment; excluded from WIND
 #                        fitting only. Flags are not changed.
+# unexplained:           noted for follow-up only; no effect on the table or models.
+#
+# In addition, build_hourly_table.py marks as "suspect" any run of 6+ identical hourly values
+# (frozen data; see FLAT_RUN_H), so those are not listed here.
 
 # Hours listed here stay in the table with flag "suspect" and are excluded from model fitting.
 # start/end are hour-start labels in UTC, both INCLUSIVE.
@@ -31,3 +35,23 @@ candidate_curtailment:
     end: 2024-08-24T14:00Z
   - start: 2024-08-25T08:00Z
     end: 2024-08-25T13:00Z
+
+unexplained:
+  # Large unexplained hour-to-hour jumps in wind_cf from the ramp check (> 8 robust sigma,
+  # 2024 run). NOT labelled and NOT excluded from anything; to check against prices (ENTSO-E).
+  - time: 2024-03-18T07:00Z
+    series: wind
+    note: ramp z = -10.2 (actual 0.44 vs predicted 0.49 cf)
+  - time: 2024-11-16T12:00Z
+    series: wind
+    note: ramp z = +10.5 (actual 0.50 vs predicted 0.40 cf)
+  - time: 2024-11-25T04:00Z
+    series: wind
+    note: ramp z = +8.8 (actual 0.74 vs predicted 0.74 cf; jump from the previous hour)
+  - start: 2023-06-13T13:00Z
+    end: 2023-10-31T23:00Z
+    series: [consumption, production, wind, net_import]
+    note: >
+      After Fingrid's switch to 15-min data. Besides the frozen runs (already suspect), the
+      balance consumption - production - net_import is off by 150-650 MW on average per month
+      in clean hours (vs ~11 MW from Nov 2023). Not labelled; candidate for suspect, user to decide.

@@ -32,7 +32,14 @@ Solar data:
 
 - **Solar output is not measured.** The baseline solar series is Fingrid's solar power generation forecast updated every 15 minutes (dataset 248). It is a forecast-based estimate built from weather forecasts and assumed capacity and locations, not a measurement. Most small-scale PV is behind the meter and unmetered.
 - **Solar capacity is an estimate.** The capacity used for solar capacity factors is the capacity Fingrid assumes in its forecast (dataset 267). Fingrid updates it manually and states that it is not the official amount of installed capacity.
-- Dataset 248 has a timing artefact around 09–12 UTC in spring and summer (too high at 09, too low at 11 UTC). Daily totals are unaffected. A total-preserving correction is documented in `src/process/solar_artefact.py` but not applied.
+- Dataset 248 has a timing artefact around 09–12 UTC in spring and summer, strongest in 2024 (too high at 09, too low at 11 UTC). It is corrected by default: each day's 09–12 UTC total is redistributed using the shape of Fingrid's day-ahead solar forecast (dataset 247), which keeps daily totals unchanged. The setting is `solar.artefact_correction` in `config/scenarios.yaml`, and uncorrected values are kept alongside.
+- Fingrid's solar capacity (dataset 267) starts on 2019-04-23, so solar capacity factors are unavailable for January–April 2019.
 - A weather-driven alternative profile (pvlib, 15° tilt, south-facing, scaled to the daily totals of dataset 248) is kept for sensitivity analysis. It overestimates winter output relative to dataset 248, likely because of snow cover.
 
-Wind data: the wind capacity used for capacity factors is the capacity in Fingrid's wind forecast (dataset 268), i.e. capacity actually producing, not official installed capacity. Projections will use official installed capacity statistics.
+Wind data: the wind capacity used for capacity factors is the capacity in Fingrid's wind forecast (dataset 268), i.e. capacity actually producing, not official installed capacity. Projections will use official installed capacity statistics. The output per MW at a given wind speed fell from 2021 to 2025, so a model fitted on older years overestimates recent output.
+
+Data quality, 2019–2025:
+
+- Hours with frozen data (the same value for 6 hours or more) are marked suspect and excluded from model fitting. Most of them fall between June and September 2023, just after Fingrid switched to 15-minute data.
+- Consumption should equal production plus net imports. Before June 2023 it is lower by a steady 25–60 MW; from November 2023 the gap averages about 20 MW. Between June and October 2023 the hourly gap is often several hundred MW, so data from that period is less reliable.
+- Net imports include the Finland–Russia link, which carried about 3–9 TWh a year until trade stopped in May 2022.

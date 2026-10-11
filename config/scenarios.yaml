@@ -4,18 +4,27 @@
 
 solar:
   # Hourly solar output per MW installed (capacity factor profile).
-  #   fingrid: solar_cf = Fingrid 248 / 267 (baseline). 248 is a forecast-based estimate, not a
-  #            measurement, with a 09-12 UTC timing artefact (correction proposed, not applied).
+  #   fingrid: Fingrid 248 / 267 (baseline). 248 is a forecast-based estimate, not a measurement.
   #   pvlib:   weather-driven pvlib model, 15 deg tilt, south, scaled to 248 daily totals
   #            (src/models/renewables.py). Works for any weather year.
   # Both are in data/processed/solar_profiles_<year>.parquet.
   profile: fingrid          # fingrid | pvlib
 
-  # Installed solar capacity.
-  #   baseline: Fingrid 267 (capacity assumed in Fingrid's forecast; an estimate, not an official
-  #             statistic). For future years: official figures, to be added with the projections.
-  #   low:      a lower capacity case for sensitivity. NOT YET DEFINED: needs a value and source.
-  capacity_case: baseline   # baseline | low
+  # Correct the 09-12 UTC timing artefact in 248 (src/process/solar_artefact.py): each day's
+  # 09-12 UTC total is redistributed by Fingrid 247's shares; daily totals are unchanged.
+  # Applied only where 247 has data. Read by src/process/build_hourly_table.py:
+  #   true  -> columns solar / solar_cf_fingrid are corrected; raw copies kept in
+  #            solar_raw / solar_cf_fingrid_raw
+  #   false -> solar / solar_cf_fingrid equal the raw values
+  artefact_correction: true
+
+  # Installed solar capacity case.
+  #   baseline: history = Fingrid 267 (capacity assumed in Fingrid's forecast; an estimate, not an
+  #             official statistic). Future years: real numbers to be added with the projections.
+  #   low:      RULE, not a number: capacity frozen at the latest known value (no new solar).
+  #   high:     real numbers to be added with the projections.
+  capacity_case: baseline   # baseline | low | high
   capacity_cases:
-    baseline: {source: fingrid_267}
-    low: {multiplier: null, source: null}
+    baseline: {history: fingrid_267, future: null}   # future: set when projections are built
+    low: {rule: freeze_at_latest_known}
+    high: {future: null}                             # set when projections are built

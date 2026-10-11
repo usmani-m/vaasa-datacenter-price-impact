@@ -13,8 +13,9 @@ Wind (target: wind_cf = Fingrid wind 75 / Fingrid forecast capacity 268)
   Ramp check: unexplained hour-to-hour changes (jumps) and up-down pairs (spikes). Report only.
 
 Solar
-  Baseline profile: solar_cf = Fingrid 248 / 267 (from the hourly table). 248 is itself a
-  forecast-based estimate and has a 09-12 UTC timing artefact (see src/process/solar_artefact.py).
+  Baseline profile: solar_cf_fingrid = Fingrid 248 / 267 (from the hourly table). 248 is itself a
+  forecast-based estimate; its 09-12 UTC timing artefact is corrected in the table when
+  solar.artefact_correction is set (raw copy: solar_cf_fingrid_raw).
   Alternative profile: pvlib per city point (equal capacity shares), fixed tilt/azimuth, PVWatts
   DC with SAPM cell temperature -> raw output per MW. One scale factor is fitted on DAILY totals
   against 248 (avoids its intra-day artefact); it absorbs system losses, snow, shading,
@@ -26,6 +27,7 @@ that are not labelled candidate_curtailment (config/data_issues.yaml).
 
 Usage:
     python -m src.models.renewables --year 2024
+    python -m src.models.renewables --wind-years 2019 2020 2021 2022 2023 2024 2025
 """
 
 from __future__ import annotations
@@ -351,9 +353,7 @@ def run(year: int) -> None:
     pd.set_option("display.width", 160)
     t = pd.read_parquet(PROCESSED_DIR / f"hourly_{year}.parquet")
     points = list(weather.load_locations()["wind"])
-    fit_mask = (t["flag_wind"].isin(FIT_FLAGS) & t["flag_wind_capacity"].isin(FIT_FLAGS)
-                & ~t["candidate_curtailment"]
-                & t["wind_cf"].notna() & t[[f"ws100_{p}" for p in points]].notna().all(axis=1))
+    fit_mask = wind_fit_mask(t, points)
     print(f"\n=== Wind: {int(fit_mask.sum())} fit hours, {int((~fit_mask).sum())} excluded "
           f"(suspect/missing: {int((~t['flag_wind'].isin(FIT_FLAGS)).sum())}, "
           f"candidate curtailment: {int(t['candidate_curtailment'].sum())}) ===")
@@ -466,7 +466,8 @@ def run(year: int) -> None:
 
     # Solar profiles per MW installed, for the scenario engine (config/scenarios.yaml: solar.profile)
     profiles = pd.DataFrame({
-        "solar_cf_fingrid": t["solar_cf"],  # baseline: Fingrid 248 / 267 (forward-filled)
+        "solar_cf_fingrid": t["solar_cf_fingrid"],  # baseline: Fingrid 248 / 267 (artefact-corrected if set)
+        "solar_cf_fingrid_raw": t["solar_cf_fingrid_raw"],  # uncorrected 248 / 267
         "solar_cf_pvlib": sol["scale"] * raw,  # alternative: pvlib, weather-driven
     })
     ppath = PROCESSED_DIR / f"solar_profiles_{year}.parquet"
@@ -477,10 +478,82 @@ def run(year: int) -> None:
         print(f"Wrote {p}")
 
 
+def wind_fit_mask(t: pd.DataFrame, points: list[str]) -> pd.Series:
+    return (t["flag_wind"].isin(FIT_FLAGS) & t["flag_wind_capacity"].isin(FIT_FLAGS)
+            & ~t["candidate_curtailment"]
+            & t["wind_cf"].notna() & t[[f"ws100_{p}" for p in points]].notna().all(axis=1))
+
+
+def run_wind_years(years: list[int], reference_year: int = 2024) -> None:
+    """Wind on several years: leave-one-year-out CV vs a model fitted on reference_year only.
+
+    For each test year Y:
+      single-year: logistic fitted on reference_year only (for Y == reference_year itself the
+                   leave-one-month-out predictions are used, so it is never scored in-sample)
+      pooled LOYO: logistic (and GBM benchmark) fitted on all years except Y
+    """
+    pd.set_option("display.width", 160)
+    points = list(weather.load_locations()["wind"])
+    t = pd.concat([pd.read_parquet(PROCESSED_DIR / f"hourly_{y}.parquet") for y in years])
+    t["year"] = t.index.year
+    fit_mask = wind_fit_mask(t, points)
+    print(f"\n=== Wind, {years[0]}-{years[-1]}: {int(fit_mask.sum())} fit hours, {int((~fit_mask).sum())} excluded ===")
+
+    # each year's own curve, to see drift in the fleet (newer, taller turbines)
+    per_year = {}
+    for y in years:
+        m = fit_mask & (t["year"] == y)
+        p = fit_logistic(t.loc[m, "ws100_mean"].to_numpy(), t.loc[m, "wind_cf"].to_numpy())
+        per_year[y] = {"mean_cf": t.loc[m, "wind_cf"].mean(), "mean_ws100": t.loc[m, "ws100_mean"].mean(),
+                       "capacity_MW_mean": t.loc[m, "wind_capacity"].mean(), **dict(zip(["L", "k", "v0", "c"], p)),
+                       "cf_at_8ms": logistic(8.0, *p)}
+    print("\nPer-year logistic fit (in-sample, for drift only):")
+    print(pd.DataFrame(per_year).T.round(3).to_string())
+
+    ref = t[t["year"] == reference_year]
+    ref_mask = fit_mask[t["year"] == reference_year]
+    single = LogisticModel().fit(ref[ref_mask], ref.loc[ref_mask, "wind_cf"])
+    ref_lomo = leave_one_month_out(LogisticModel, ref, ref_mask)
+
+    pred = {k: pd.Series(np.nan, index=t.index) for k in ("single_year", "pooled_loyo", "gbm_loyo")}
+    for y in years:
+        test = t["year"] == y
+        train = fit_mask & ~test
+        pred["pooled_loyo"][test] = LogisticModel().fit(t[train], t.loc[train, "wind_cf"]).predict(t[test])
+        pred["gbm_loyo"][test] = GBMModel(points).fit(t[train], t.loc[train, "wind_cf"]).predict(t[test])
+        pred["single_year"][test] = ref_lomo.to_numpy() if y == reference_year else single.predict(t[test])
+
+    rows = {}
+    for y in years + ["all"]:
+        m = fit_mask if y == "all" else fit_mask & (t["year"] == y)
+        yv = t.loc[m, "wind_cf"]
+        rows[y] = {f"{k} {s}": v for k in pred for s, v in scores(yv, pred[k][m]).items()}
+    res = pd.DataFrame(rows).T
+    print(f"\nOut-of-sample scores by test year (single_year = fitted on {reference_year} only):")
+    print(res.round(4).to_string())
+
+    pooled = LogisticModel().fit(t[fit_mask], t.loc[fit_mask, "wind_cf"])
+    MODELS_DIR.mkdir(exist_ok=True)
+    path = MODELS_DIR / f"renewables_wind_{years[0]}_{years[-1]}.json"
+    path.write_text(json.dumps({
+        "years": years, "fit_hours": int(fit_mask.sum()),
+        "logistic_pooled": pooled.to_dict(),
+        "per_year_logistic": {str(y): {k: float(v) for k, v in d.items()} for y, d in per_year.items()},
+        "scores_by_test_year": {str(k): {c: float(v) for c, v in r.items()} for k, r in res.round(5).iterrows()},
+    }, indent=2))
+    print(f"\nWrote {path}")
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--year", type=int, required=True)
-    run(p.parse_args().year)
+    which = p.add_mutually_exclusive_group(required=True)
+    which.add_argument("--year", type=int, help="full single-year run (wind CV by month, checks, solar)")
+    which.add_argument("--wind-years", type=int, nargs="+", help="multi-year wind run, leave-one-year-out CV")
+    args = p.parse_args()
+    if args.year:
+        run(args.year)
+    else:
+        run_wind_years(sorted(args.wind_years))
 
 
 if __name__ == "__main__":

@@ -39,14 +39,19 @@ C = {"blue": "#2a78d6", "orange": "#eb6834", "aqua": "#1baf7a", "yellow": "#eda1
 
 
 def correct_248(solar: pd.Series, dayahead: pd.Series, window: list[int] = WINDOW_UTC) -> pd.Series:
-    """Redistribute each day's 248 window total using 247's within-window shares (see module doc)."""
+    """Redistribute each day's 248 window total using 247's within-window shares (see module doc).
+
+    A day is corrected only if both series have all window hours and 247's window total is > 0;
+    otherwise 248 is left unchanged for that day.
+    """
     out = solar.copy()
     win = solar.index.hour.isin(window)
-    day = solar.index.date[win]
-    a_tot = solar[win].groupby(day).transform("sum")
-    b_tot = dayahead[win].groupby(day).transform("sum")
-    share = (dayahead[win] / b_tot).where(b_tot > 0)
-    out[win] = (a_tot * share).where(share.notna(), solar[win])
+    a, b = solar[win], dayahead.reindex(solar.index)[win]
+    day = a.index.date
+    a_tot, b_tot = a.groupby(day).transform("sum"), b.groupby(day).transform("sum")
+    complete = (a.notna().groupby(day).transform("sum") == len(window)) & \
+               (b.notna().groupby(day).transform("sum") == len(window)) & (b_tot > 0)
+    out[win] = (a_tot * b / b_tot).where(complete, a)
     return out
 
 
