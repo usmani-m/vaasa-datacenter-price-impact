@@ -12,7 +12,9 @@ solar:
 
   # Correct the 09-12 UTC timing artefact in 248 (src/process/solar_artefact.py): each day's
   # 09-12 UTC total is redistributed by Fingrid 247's shares; daily totals are unchanged.
-  # Applied only where 247 has data. Read by src/process/build_hourly_table.py:
+  # Applied only in years where the artefact is detected (248's May-Aug peak hour earlier than
+  # 247's; 2019-2025: 2019, 2020, 2021, 2024) and only on days where 247 has data.
+  # Read by src/process/build_hourly_table.py:
   #   true  -> columns solar / solar_cf_fingrid are corrected; raw copies kept in
   #            solar_raw / solar_cf_fingrid_raw
   #   false -> solar / solar_cf_fingrid equal the raw values

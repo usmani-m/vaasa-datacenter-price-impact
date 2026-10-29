@@ -15,7 +15,8 @@ Columns (power in MW = MWh/h, index = hour start, UTC):
                hourly values = frozen data; keep but exclude from model fitting) | "missing".
                Derived series take the worst flag of their inputs.
   solar        solar = Fingrid 248 with the 09-12 UTC artefact correction if
-               config/scenarios.yaml solar.artefact_correction is true (needs 247 for the day);
+               config/scenarios.yaml solar.artefact_correction is true, only in years where the
+               artefact is detected (solar_artefact.has_artefact) and days where 247 exists;
                solar_raw = uncorrected 248; solar_corrected = True where the correction changed it.
   weather      ws100_<point> per wind point, ws100_mean (wind points),
                temp_mean (city points, C), ghi_mean (shortwave, city points, W/m2)
@@ -49,7 +50,7 @@ import pandas as pd
 import yaml
 
 from src.fetch import entsoe, fingrid, weather
-from src.process.solar_artefact import correct_248
+from src.process.solar_artefact import correct_248, has_artefact
 
 MAX_GAP_H = 3
 FLAT_RUN_H = 6  # runs of >= this many identical hourly values are marked suspect (frozen data)
@@ -169,9 +170,12 @@ def build(year: int) -> pd.DataFrame:
     mark_suspect(t, suspects, FINGRID_SERIES)
 
     # Solar 09-12 UTC artefact correction (config/scenarios.yaml: solar.artefact_correction)
+    # applied only in years where the artefact is detected (solar_artefact.has_artefact)
     t["solar_raw"] = t["solar"]
-    if load_solar_settings().get("artefact_correction", False):
-        t["solar"] = correct_248(t["solar_raw"], fg("solar_dayahead"))
+    dayahead = fg("solar_dayahead")
+    t.attrs["solar_artefact_detected"] = has_artefact(t["solar_raw"], dayahead)
+    if load_solar_settings().get("artefact_correction", False) and t.attrs["solar_artefact_detected"]:
+        t["solar"] = correct_248(t["solar_raw"], dayahead)
     t["solar_corrected"] = (t["solar"] - t["solar_raw"]).abs().fillna(0) > 1e-9
 
     parts = ["production", "wind", "solar", "nuclear", "hydro"]
@@ -222,6 +226,7 @@ def build(year: int) -> pd.DataFrame:
         t["price_eur_mwh"], t["flag_price"] = fill_short_gaps(pd.read_parquet(price_path)["value"].reindex(idx))
     else:
         t["price_eur_mwh"], t["flag_price"] = np.nan, "missing"
+    mark_suspect(t, suspects, ["price"])  # flag_price (series name "price" in data_issues.yaml)
 
     for c in t.columns:
         if c.startswith("flag_"):
@@ -247,7 +252,7 @@ def summarize(t: pd.DataFrame) -> None:
     print(f"\nFlat runs (>= {FLAT_RUN_H} identical hourly values, marked suspect): {len(runs)}")
     if runs:
         print(pd.DataFrame(runs).to_string(index=False))
-    print(f"Solar hours changed by the artefact correction: {int(t['solar_corrected'].sum())}")
+    print(f"Solar artefact detected: {t.attrs.get('solar_artefact_detected')}; hours changed by the correction: {int(t['solar_corrected'].sum())}")
 
     m = t[["residual_load", "consumption", "wind", "solar"]].resample("MS").mean().round(0)
     m.index = m.index.strftime("%Y-%m")

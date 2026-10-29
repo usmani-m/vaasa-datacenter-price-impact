@@ -36,7 +36,11 @@ Solar data:
 - Fingrid's solar capacity (dataset 267) starts on 2019-04-23, so solar capacity factors are unavailable for January–April 2019.
 - A weather-driven alternative profile (pvlib, 15° tilt, south-facing, scaled to the daily totals of dataset 248) is kept for sensitivity analysis. It overestimates winter output relative to dataset 248, likely because of snow cover.
 
-Wind data: the wind capacity used for capacity factors is the capacity in Fingrid's wind forecast (dataset 268), i.e. capacity actually producing, not official installed capacity. Projections will use official installed capacity statistics. The output per MW at a given wind speed fell from 2021 to 2025, so a model fitted on older years overestimates recent output.
+Wind data: the wind capacity used for capacity factors is the capacity in Fingrid's wind forecast (dataset 268), i.e. capacity actually producing, not official installed capacity. Projections will use official installed capacity statistics.
+
+The wind curve is fitted on 2023–2025 and excludes hours with a day-ahead price of zero or below, because wind farms are often curtailed then; curtailment is handled as a price-based rule in the scenario engine instead. Even without those hours, output per MW at a given wind speed keeps falling: at 8 m/s the fitted capacity factor drops from 0.57 (2021) to 0.52 (2023), 0.50 (2024) and 0.48 (2025). This is probably a measurement effect, from the capacity figure (dataset 268) and from new wind farms being built away from the weather points, not turbines getting worse. A model fitted on older years would overestimate recent output.
+
+Price model: price is modelled from residual load, fitted on 2023–2025 and excluding the 2022 energy crisis. The tool shows a binned supply curve alongside a gradient-boosting model whose price can only rise with residual load. The estimated effect of extra load keeps imports, hydro and nuclear output fixed. In reality these respond to higher prices, so the result is a statistical estimate, not a simulation of the market.
 
 Prices: day-ahead prices for the Finnish bidding zone come from the ENTSO-E Transparency Platform. Since 1 October 2025 they are set per 15 minutes; this tool averages them to hourly values so all years are comparable. On 24 November 2023 (13–22 UTC) the price was −500 €/MWh, which was widely reported as the result of a bidding error rather than market conditions.
 

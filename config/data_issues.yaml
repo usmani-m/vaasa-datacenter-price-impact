@@ -25,6 +25,13 @@ suspect:
       and hydro (191) 2024-07-12 18:00 - 2024-07-13 08:00. The 00:00 hour is included
       because its first 15-min interval (1,301 MW) is still elevated.
 
+  - series: [price]
+    start: 2023-11-24T13:00Z
+    end: 2023-11-24T22:00Z
+    reason: >
+      FI day-ahead price -500 EUR/MWh (the auction floor) for 10 hours, widely reported as the
+      result of a bidding error rather than market conditions. Excluded from the price model.
+
 curtailment:
   # Found by the 2024 renewables run: contiguous blocks where wind_cf is below the out-of-fold
   # logistic prediction by more than 4 robust sigma, around hours beyond 5 sigma. All sunny summer
@@ -65,4 +72,5 @@ unexplained:
     note: >
       After Fingrid's switch to 15-min data. Besides the frozen runs (already suspect), the
       balance consumption - production - net_import is off by 150-650 MW on average per month
-      in clean hours (vs ~11 MW from Nov 2023). Not labelled; candidate for suspect, user to decide.
+      in clean hours (vs ~11 MW from Nov 2023). DECIDED (2026-10-29): not labelled as a period;
+      only the flat-run hours inside it are suspect (automatic flat-run check).

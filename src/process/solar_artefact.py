@@ -55,6 +55,22 @@ def correct_248(solar: pd.Series, dayahead: pd.Series, window: list[int] = WINDO
     return out
 
 
+def has_artefact(solar: pd.Series, dayahead: pd.Series) -> bool:
+    """True if the year's 248 shows the timing artefact.
+
+    Rule: over May-Aug hours where both series exist, the mean daily shape of 248 peaks at an
+    earlier UTC hour than 247's. 2019-2025 check: present in 2019, 2020, 2021 and 2024 (248 peaks
+    at 09, 247 at 10 UTC); absent in 2022, 2023 and 2025 (both peak at 10 UTC).
+    """
+    both = solar.notna() & dayahead.reindex(solar.index).notna()
+    summer = both & solar.index.month.isin(SUMMER)
+    if summer.sum() < 24 * 30:
+        return False
+    a = daily_shape(solar[both], SUMMER)
+    b = daily_shape(dayahead.reindex(solar.index)[both], SUMMER)
+    return int(a.idxmax()) < int(b.idxmax())
+
+
 def daily_shape(s: pd.Series, months: list[int]) -> pd.Series:
     """Mean share of the daily total per UTC hour (%), over days in the given months."""
     x = s[s.index.month.isin(months)]

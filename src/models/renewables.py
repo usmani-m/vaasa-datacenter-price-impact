@@ -22,8 +22,9 @@ Solar
   orientation mix and the capacity estimate. Both profiles are written to
   data/processed/solar_profiles_<year>.parquet.
 
-Wind fitting uses only hours whose flags are "ok" or "filled" (suspect / missing excluded) and
-that are not labelled curtailment (config/data_issues.yaml).
+Wind fitting uses only hours whose flags are "ok" or "filled" (suspect / missing excluded), that
+are not labelled curtailment (config/data_issues.yaml) and whose day-ahead price is > 0 (wind
+is often curtailed at price <= 0; curtailment is a price-based rule in the scenario engine).
 
 Usage:
     python -m src.models.renewables --year 2024
@@ -356,7 +357,7 @@ def run(year: int) -> None:
     fit_mask = wind_fit_mask(t, points)
     print(f"\n=== Wind: {int(fit_mask.sum())} fit hours, {int((~fit_mask).sum())} excluded "
           f"(suspect/missing: {int((~t['flag_wind'].isin(FIT_FLAGS)).sum())}, "
-          f"curtailment: {int(t['curtailment'].sum())}) ===")
+          f"curtailment label: {int(t['curtailment'].sum())}, price <= 0: {int((t['price_eur_mwh'] <= 0).sum())}) ===")
 
     makers = {"logistic": LogisticModel, "per_point": lambda: PerPointModel(points), "gbm": lambda: GBMModel(points)}
     oof = {k: leave_one_month_out(mk, t, fit_mask) for k, mk in makers.items()}
@@ -479,8 +480,14 @@ def run(year: int) -> None:
 
 
 def wind_fit_mask(t: pd.DataFrame, points: list[str]) -> pd.Series:
+    """Hours used to fit the wind curve: clean flags, not curtailed, and price > 0.
+
+    Wind is often curtailed when the day-ahead price is <= 0, so those hours are excluded and
+    the fitted curve describes uncurtailed output. Curtailment is a price-based rule in the
+    scenario engine instead.
+    """
     return (t["flag_wind"].isin(FIT_FLAGS) & t["flag_wind_capacity"].isin(FIT_FLAGS)
-            & ~t["curtailment"]
+            & ~t["curtailment"] & (t["price_eur_mwh"] > 0)
             & t["wind_cf"].notna() & t[[f"ws100_{p}" for p in points]].notna().all(axis=1))
 
 
