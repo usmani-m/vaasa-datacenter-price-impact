@@ -23,7 +23,7 @@ Solar
   data/processed/solar_profiles_<year>.parquet.
 
 Wind fitting uses only hours whose flags are "ok" or "filled" (suspect / missing excluded) and
-that are not labelled candidate_curtailment (config/data_issues.yaml).
+that are not labelled curtailment (config/data_issues.yaml).
 
 Usage:
     python -m src.models.renewables --year 2024
@@ -276,7 +276,7 @@ def plot_wind_curve(t, fit_mask, flagged, logistic_model, year) -> Path:
     excl = ~fit_mask
     if excl.any():
         ax.scatter(t.loc[excl, "ws100_mean"], t.loc[excl, "wind_cf"], s=30, marker="x", color=C["muted"],
-                   lw=1.2, label="Excluded (suspect / missing / candidate curtailment)")
+                   lw=1.2, label="Excluded (suspect / missing / curtailment)")
     v = np.linspace(0, t["ws100_mean"].max() + 0.5, 300)
     ax.plot(v, logistic(v, *logistic_model.params), color=C["orange"], lw=2.5, label="Fitted logistic curve")
     ax.set_xlabel("Mean 100 m wind speed over the wind points (m/s, ERA5)", color=C["muted"])
@@ -356,7 +356,7 @@ def run(year: int) -> None:
     fit_mask = wind_fit_mask(t, points)
     print(f"\n=== Wind: {int(fit_mask.sum())} fit hours, {int((~fit_mask).sum())} excluded "
           f"(suspect/missing: {int((~t['flag_wind'].isin(FIT_FLAGS)).sum())}, "
-          f"candidate curtailment: {int(t['candidate_curtailment'].sum())}) ===")
+          f"curtailment: {int(t['curtailment'].sum())}) ===")
 
     makers = {"logistic": LogisticModel, "per_point": lambda: PerPointModel(points), "gbm": lambda: GBMModel(points)}
     oof = {k: leave_one_month_out(mk, t, fit_mask) for k, mk in makers.items()}
@@ -391,7 +391,7 @@ def run(year: int) -> None:
     print(f"threshold = {OUTLIER_K:g} x robust sigma = {threshold:.3f} cf "
           f"(~{threshold * t['wind_capacity'].mean():.0f} MW at mean capacity)")
     print(f"flagged hours: {int(flagged.sum())} (of which already excluded from fit: {int((flagged & ~fit_mask).sum())}, "
-          f"candidate curtailment: {int((flagged & t['candidate_curtailment']).sum())})")
+          f"curtailment: {int((flagged & t['curtailment']).sum())})")
     top = pd.DataFrame({"actual_cf": t["wind_cf"], "pred_cf": oof[best], "resid": resid,
                         "resid_MW": resid * t["wind_capacity"], "ws100_mean": t["ws100_mean"],
                         "temp_mean": t["temp_mean"], "flag_wind": t["flag_wind"]})[flagged]
@@ -448,7 +448,7 @@ def run(year: int) -> None:
             "ramp_check": {"robust_sigma": rsigma, "jump_k": RAMP_K, "spike_k": SPIKE_K,
                            "jump_hours": int(jumps.sum()), "spike_hours": int(spikes.sum())},
             "excluded_from_fit": {"suspect_or_missing": int((~t["flag_wind"].isin(FIT_FLAGS)).sum()),
-                                  "candidate_curtailment": int(t["candidate_curtailment"].sum())},
+                                  "curtailment": int(t["curtailment"].sum())},
         },
         "solar": {
             "target": "Fingrid 248 (forecast series), daily totals",
@@ -480,7 +480,7 @@ def run(year: int) -> None:
 
 def wind_fit_mask(t: pd.DataFrame, points: list[str]) -> pd.Series:
     return (t["flag_wind"].isin(FIT_FLAGS) & t["flag_wind_capacity"].isin(FIT_FLAGS)
-            & ~t["candidate_curtailment"]
+            & ~t["curtailment"]
             & t["wind_cf"].notna() & t[[f"ws100_{p}" for p in points]].notna().all(axis=1))
 
 

@@ -10,3 +10,4 @@ statsmodels
 holidays
 matplotlib
 scipy
+entsoe-py

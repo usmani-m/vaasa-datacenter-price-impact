@@ -22,12 +22,13 @@ Columns (power in MW = MWh/h, index = hour start, UTC):
   derived      residual_load = consumption - wind - solar, wind_cf = wind / wind_capacity,
                solar_cf_fingrid = solar / solar_capacity (baseline solar profile),
                solar_cf_fingrid_raw = solar_raw / solar_capacity
-  issues       candidate_curtailment: True in likely curtailment hours (config/data_issues.yaml);
+  issues       curtailment: True in likely curtailment hours (config/data_issues.yaml);
                excluded from wind fitting only. crisis_2022: True for all hours of 2022 (UTC).
   calendar     hour_local, weekday_local (0 = Mon), month_local, is_holiday
                (Europe/Helsinki local time; holidays from the `holidays` package, incl.
                Midsummer Eve and Christmas Eve)
-  price        price_eur_mwh: empty placeholder until ENTSO-E is connected
+  price        price_eur_mwh: ENTSO-E day-ahead price, bidding zone FI (EUR/MWh), hourly mean of
+               15-min prices from 2025-10-01; flag_price as for the Fingrid series
 
 Usage:
     python -m src.process.build_hourly_table --year 2019 2020 2021 2022 2023 2024 2025
@@ -47,7 +48,7 @@ import numpy as np
 import pandas as pd
 import yaml
 
-from src.fetch import fingrid, weather
+from src.fetch import entsoe, fingrid, weather
 from src.process.solar_artefact import correct_248
 
 MAX_GAP_H = 3
@@ -211,11 +212,16 @@ def build(year: int) -> pd.DataFrame:
     t["is_holiday"] = [d in fi_holidays for d in local.date]
 
     # likely curtailment: data kept and flags unchanged, excluded from wind fitting only
-    t["candidate_curtailment"] = in_periods(idx, load_issues("candidate_curtailment"))
+    t["curtailment"] = in_periods(idx, load_issues("curtailment"))
     # energy crisis year, so models can include or exclude it
     t["crisis_2022"] = idx.year == 2022
 
-    t["price_eur_mwh"] = np.nan  # placeholder: ENTSO-E day-ahead price
+    # ENTSO-E day-ahead price (FI), hourly mean (15-min prices from 2025-10-01 are averaged)
+    price_path = entsoe.hourly_path(start, end)
+    if price_path.exists():
+        t["price_eur_mwh"], t["flag_price"] = fill_short_gaps(pd.read_parquet(price_path)["value"].reindex(idx))
+    else:
+        t["price_eur_mwh"], t["flag_price"] = np.nan, "missing"
 
     for c in t.columns:
         if c.startswith("flag_"):
@@ -233,7 +239,7 @@ def summarize(t: pd.DataFrame) -> None:
     print("\nHours per flag:")
     print(pd.DataFrame(flags).T.to_string())
 
-    data_cols = [c for c in t.columns if not c.startswith("flag_") and c != "price_eur_mwh"]
+    data_cols = [c for c in t.columns if not c.startswith("flag_")]
     nan = t[data_cols].isna().sum()
     print("\nRemaining NaN hours (non-flag columns):", nan[nan > 0].to_dict() or "none")
 

@@ -38,6 +38,8 @@ Solar data:
 
 Wind data: the wind capacity used for capacity factors is the capacity in Fingrid's wind forecast (dataset 268), i.e. capacity actually producing, not official installed capacity. Projections will use official installed capacity statistics. The output per MW at a given wind speed fell from 2021 to 2025, so a model fitted on older years overestimates recent output.
 
+Prices: day-ahead prices for the Finnish bidding zone come from the ENTSO-E Transparency Platform. Since 1 October 2025 they are set per 15 minutes; this tool averages them to hourly values so all years are comparable. On 24 November 2023 (13–22 UTC) the price was −500 €/MWh, which was widely reported as the result of a bidding error rather than market conditions.
+
 Data quality, 2019–2025:
 
 - Hours with frozen data (the same value for 6 hours or more) are marked suspect and excluded from model fitting. Most of them fall between June and September 2023, just after Fingrid switched to 15-minute data.

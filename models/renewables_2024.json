@@ -115,7 +115,7 @@
     },
     "excluded_from_fit": {
       "suspect_or_missing": 3,
-      "candidate_curtailment": 18
+      "curtailment": 18
     }
   },
   "solar": {
