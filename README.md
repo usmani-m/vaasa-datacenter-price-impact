@@ -44,7 +44,9 @@ Average price change, 2024 market year (€/MWh; low end to central estimate):
 
 Larger data centers have a proportionally larger effect. The bigger the extra demand, the more often it exceeds the spare import capacity in hours that would otherwise share Sweden's price, and in those hours the steeper Finnish price curve applies. In 2024 the central estimate rises from 1.46 €/MWh per 100 MW at 100 MW to 1.66 per 100 MW at 1,000 MW.
 
-The consumer cost is the price change multiplied by existing Finnish consumption. It is a transfer from consumers to producers at wholesale level, not a net cost to the economy, and it excludes the data center's own consumption.
+**Results above about 500 MW are increasingly an upper bound.** A demand increase that large would attract investment (new wind, solar, storage and transmission) and change how imports flow, and the model includes neither.
+
+The consumer cost is the price change multiplied by existing Finnish consumption. **It assumes all consumption pays the spot price.** In reality many consumers are on fixed-price contracts or hedged, so the immediate effect on bills is smaller and arrives with a delay. It is also a transfer from consumers to producers at wholesale level, not a net cost to the economy, and it excludes the data center's own consumption.
 
 With a PPA, the low-end and central variants can swap places, because in hours when the PPA wind farm produces more than the data center uses, the extra wind lowers prices.
 
