@@ -24,6 +24,30 @@ Install dependencies from `requirements.txt`. Copy `.env.example` to `.env` and 
 
 Fetched and processed data are stored under `data/` and are not committed to the repository. Usage instructions will be added with the fetch and analysis workflows.
 
+## Data Center Scenarios
+
+`python -m src.scenarios.engine` runs a grid of data center sizes (0–1,000 MW) against the 2023, 2024 and 2025 market years, with and without a renewable power purchase agreement (PPA), for each model variant. All settings are in `config/scenarios.yaml`.
+
+- **Load.** Flat by default. A summer daytime cooling bump and a ramp-up timeline are optional; the ramp-up values in the config are placeholders.
+- **PPA.** New wind capacity sized so its annual output equals the data center's consumption. A 300 MW data center needs about 1,000 MW of wind. Hourly output follows the fitted wind curve and that year's weather.
+- **Curtailment.** In hours when the price was zero or negative and wind farms were curtailed, extra demand first uses that curtailed wind, with no effect on the price.
+- **Outputs.** Hourly price change; annual, monthly and hour-of-day averages; the price-duration curve with and without the data center; the number of coupled hours that become constrained; and the extra annual cost to existing Finnish consumers. All of these are saved to `outputs/scenarios/grid.json` for the dashboard.
+
+Average price change, 2024 market year (€/MWh; low end to central estimate):
+
+| Data center | No PPA | With PPA |
+|---|---|---|
+| 100 MW | +1.1 to +1.5 | +0.3 to +0.6 |
+| 300 MW | +3.3 to +4.6 | +1.0 to +1.7 |
+| 500 MW | +5.5 to +7.9 | +1.7 to +2.8 |
+| 1,000 MW | +11.1 to +16.6 | +3.5 to +5.7 |
+
+Larger data centers have a proportionally larger effect. The bigger the extra demand, the more often it exceeds the spare import capacity in hours that would otherwise share Sweden's price, and in those hours the steeper Finnish price curve applies. In 2024 the central estimate rises from 1.46 €/MWh per 100 MW at 100 MW to 1.66 per 100 MW at 1,000 MW.
+
+The consumer cost is the price change multiplied by existing Finnish consumption. It is a transfer from consumers to producers at wholesale level, not a net cost to the economy, and it excludes the data center's own consumption.
+
+With a PPA, the low-end and central variants can swap places, because in hours when the PPA wind farm produces more than the data center uses, the extra wind lowers prices.
+
 ## Limitations
 
 Finland is modeled as a single bidding zone. Scenario results depend on explicit assumptions for data center size, load factor, ramp-up, and renewable power purchase agreements; this is a statistical estimate, not a full electricity-market model.
@@ -53,13 +77,29 @@ How hours are classified (`config/coupling.yaml`):
 
 Estimated price effect of a flat +300 MW (fitted on 2023–2025):
 
-| Year | Central estimate | Range | Without coupling (upper bound) |
+| Year | Central estimate (gradient boosting; upper end of the likely range) | Range (low end: structural variant) | Ignoring coupling (old upper bound) |
 |---|---|---|---|
 | 2023 | +6.2 €/MWh | +3.4 to +6.2 | +9.1 |
 | 2024 | +4.7 €/MWh | +3.4 to +4.7 | +8.4 |
 | 2025 | +5.2 €/MWh | +2.1 to +5.2 | +7.9 |
 
-The central estimate uses the gradient-boosting model. The range also includes the binned supply curve, and a structural variant in which the imported part of the load raises the price by Finland's share of Finnish and Swedish (SE1 + SE3) load times the Finnish price slope. The result depends on the year: in 2023, 80% of hours were coupled with Sweden, compared with 53% in 2025, when far more hours were price-separated under flow-based coupling.
+How to read the range:
+
+- **Central estimate, gradient boosting: the upper end of the likely range.** Hydro producers would shift output toward hours with higher prices, and imports would respond as well, but the model holds both fixed. The real effect is therefore probably lower.
+- **Low end, structural variant.** For the share of extra load met by imports in coupled hours, the price rises by Finland's share of Finnish and Swedish (SE1 + SE3) load, about 47%, times the Finnish price slope. Because it extends the Finnish price curve to lower loads than it was fitted on, it is a lower bound rather than an estimate.
+- **Binned supply curve.** A simpler model, usually between the two.
+
+The result depends on the year. In 2023, 80% of hours were coupled with Sweden; in 2025 only 53% were, because flow-based coupling separated prices much more often, despite more import capacity.
+
+How the coupling threshold affects the results (share of hours coupled with Sweden, and the gradient-boosting estimate for +300 MW). The table applies one plain threshold to all years; the tool itself uses 0.5 €/MWh, plus the flow-based rule above after 29 October 2024.
+
+| Threshold | 2023 | 2024 | 2025 |
+|---|---|---|---|
+| 0.5 €/MWh | 80% coupled, +5.9 €/MWh | 63%, +4.6 | 43%, +5.0 |
+| 2 €/MWh | 81%, +6.1 | 67%, +4.6 | 55%, +5.1 |
+| 5 €/MWh | 83%, +6.2 | 71%, +4.6 | 65%, +5.1 |
+
+Why the threshold differs by period: before flow-based coupling, coupled zones had exactly the same price (Finland equalled SE1 to the cent in 63% of hours). After it, exact equality fell to 9% of hours, and price differences of 0.01–2 €/MWh became common (about 40% of hours). The threshold changes how hours are classified, especially in 2025, but hardly changes the estimate.
 
 Prices: day-ahead prices for the Finnish bidding zone come from the ENTSO-E Transparency Platform. Since 1 October 2025 they are set per 15 minutes; this tool averages them to hourly values so all years are comparable. On 24 November 2023 (13–22 UTC) the price was −500 €/MWh, which was widely reported as the result of a bidding error rather than market conditions.
 

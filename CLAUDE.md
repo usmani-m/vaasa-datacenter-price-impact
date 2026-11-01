@@ -63,3 +63,32 @@ tests/
 7. README: methodology, data attribution, limitations (single bidding zone, no hydro strategy modelling, statistical not full market model)
 
 First milestone: phases 1–5 end-to-end for 2024 with deliberately crude models + one chart. Then improve one component at a time.
+
+## Decisions so far
+Agreed with the project owner; don't revisit silently. Details live in the configs named.
+
+Data
+- Fingrid datasets by short name in `config/fingrid_datasets.yaml`. Solar = dataset 248 (a forecast-based estimate, not a measurement); solar capacity = 267, wind capacity = 268 (Fingrid's forecast capacities, not official). Projections must use official capacity statistics (Renewables Finland) instead.
+- `net_import` (+ = import) = −(sum of measured border flows 55, 57, 58, 60, 61); Åland (280) excluded. FI–RU zero-filled only after trade stopped (2022-05-14).
+- 248 has a 09–12 UTC timing artefact. It is corrected only in years where it is detected (2019–2021, 2024), by redistributing each day's 09–12 UTC total using dataset 247's shape (daily totals kept). Raw values are kept; the switch is `solar.artefact_correction` in `config/scenarios.yaml`.
+- Flags: ok / filled (gaps ≤ 3 h interpolated) / suspect / missing. Runs of 6+ identical hourly values are suspect automatically; other known bad data is listed in `config/data_issues.yaml` (e.g. 2023-11-24 −500 €/MWh). June–October 2023: only the frozen-run hours are suspect.
+- `crisis_2022` flag; the price model excludes 2022 by default.
+
+Renewables
+- The wind curve (logistic on mean 100 m wind speed) is fitted on 2023–2025 and excludes suspect/missing hours, the `curtailment` label and every hour with day-ahead price ≤ 0. Curtailment is handled as a price-based rule in the scenario engine. Output per MW at 8 m/s drifts down over the years (noted in the README).
+- Solar profiles: `fingrid` (baseline) or `pvlib` (15° tilt). Low solar case = capacity frozen at the latest known value.
+
+Price and coupling (`src/models/price.py`, `src/models/coupling.py`, `config/coupling.yaml`)
+- The price model is fitted on 2023–2025: a binned supply curve, plus gradient boosting with price monotonically increasing in residual load.
+- Hourly regimes:
+  - coupled = FI ≈ SE1, or FI ≈ SE3 while not ≈ SE1 (extra load can be imported);
+  - FI coupled only with Estonia = separated (Finnish curve);
+  - export-constrained = FI below SE1, with the price increase capped at the gap to SE1;
+  - other separated hours use the Finnish curve.
+- Thresholds: 0.5 €/MWh. From 2024-10-29 23:00 UTC (flow-based market coupling): also ≤ 2 €/MWh, provided that border has ≥ 300 MW spare import capacity.
+- Import capacity: Fingrid official day-ahead values (24, 25, 112). SE1/SE3 have no official values after the flow-based switch, so fixed values are used: SE1 1,500 MW, rising to 2,000 MW from 2025-11-14 (Aurora Line); SE3 1,200 MW.
+- Extra load in coupled hours: the part that fits in spare import capacity is priced with the coupled-hour slope; the rest goes on the Finnish curve.
+- Variants: GBM = central, described as the upper end of the likely range because hydro and import response are not modelled; binned; structural (FI share of FI+SE1+SE3 load × Finnish curve) = the low end. The SE1-price variant was dropped (a definitional lower bound).
+
+Workflow
+- Commit on the current stage branch (e.g. `data-pipeline-2024`); the owner merges to master after review.
