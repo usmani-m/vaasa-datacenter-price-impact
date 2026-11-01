@@ -1,0 +1,75 @@
+# Scenario assumptions for the scenario engine (src/scenarios/engine.py, not built yet).
+# Everything here is an ASSUMPTION, not data. Data center assumptions (MW, load factor,
+# ramp-up, PPA) will be added together with the engine.
+
+solar:
+  # Hourly solar output per MW installed (capacity factor profile).
+  #   fingrid: Fingrid 248 / 267 (baseline). 248 is a forecast-based estimate, not a measurement.
+  #   pvlib:   weather-driven pvlib model, 15 deg tilt, south, scaled to 248 daily totals
+  #            (src/models/renewables.py). Works for any weather year.
+  # Both are in data/processed/solar_profiles_<year>.parquet.
+  profile: fingrid          # fingrid | pvlib
+
+  # Correct the 09-12 UTC timing artefact in 248 (src/process/solar_artefact.py): each day's
+  # 09-12 UTC total is redistributed by Fingrid 247's shares; daily totals are unchanged.
+  # Applied only in years where the artefact is detected (248's May-Aug peak hour earlier than
+  # 247's; 2019-2025: 2019, 2020, 2021, 2024) and only on days where 247 has data.
+  # Read by src/process/build_hourly_table.py:
+  #   true  -> columns solar / solar_cf_fingrid are corrected; raw copies kept in
+  #            solar_raw / solar_cf_fingrid_raw
+  #   false -> solar / solar_cf_fingrid equal the raw values
+  artefact_correction: true
+
+  # Installed solar capacity case.
+  #   baseline: history = Fingrid 267 (capacity assumed in Fingrid's forecast; an estimate, not an
+  #             official statistic). Future years: real numbers to be added with the projections.
+  #   low:      RULE, not a number: capacity frozen at the latest known value (no new solar).
+  #   high:     real numbers to be added with the projections.
+  capacity_case: baseline   # baseline | low | high
+  capacity_cases:
+    baseline: {history: fingrid_267, future: null}   # future: set when projections are built
+    low: {rule: freeze_at_latest_known}
+    high: {future: null}                             # set when projections are built
+
+# ---------------------------------------------------------------- data center scenarios
+# Read by src/scenarios/engine.py. Everything below is an ASSUMPTION: the data center's size,
+# load profile and timeline are not public.
+
+data_center:
+  # Grid of full sizes (MW) to run.
+  sizes_mw: [0, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000]
+  # Load profile: flat at the full size in every hour by default.
+  profile: flat
+  # Optional summer daytime cooling bump: extra load as a share of the size, in these local
+  # months and hours. Off by default.
+  cooling_bump:
+    enabled: false
+    months: [6, 7, 8]
+    hours_local: [10, 11, 12, 13, 14, 15, 16, 17, 18]
+    extra_share: 0.10
+  # Ramp-up: share of full size by year. ILLUSTRATIVE PLACEHOLDER values, not a known timeline.
+  # Used when a run names a target_year (projections); historical market-year runs use the full
+  # size (target_year: null).
+  ramp_up:
+    2026: 0.25
+    2027: 0.50
+    2028: 0.75
+    2029: 1.00
+  target_year: null
+
+ppa:
+  # When enabled: new wind sized so its annual energy matches the data center's
+  # (PPA MW = DC energy / sum of hourly fitted wind_cf), output = fitted wind_cf x PPA MW,
+  # using the wind curve (models/renewables_wind_2023_2025.json) and the market year's weather.
+  enabled_options: [false, true]
+
+curtailment:
+  # In hours where the actual price was <= 0 and wind was curtailed (fitted uncurtailed wind
+  # minus actual wind), extra load first absorbs the curtailed wind, with no price effect for
+  # that part. Surplus PPA wind in such hours is curtailed too (no price effect).
+  enabled: true
+
+run:
+  market_years: [2023, 2024, 2025]   # price and coupling basis (historical)
+  variants: [central, binned, structural]
+  fit_years: [2023, 2024, 2025]      # years the price/coupling models are fitted on

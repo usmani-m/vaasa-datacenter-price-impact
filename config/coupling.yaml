@@ -1,0 +1,57 @@
+# Price coupling settings for src/models/coupling.py. ASSUMPTIONS, documented below.
+
+# FI is "coupled" with SE1 when |FI price - SE1 price| <= this (EUR/MWh).
+price_tolerance_eur: 0.5
+
+# Flow-based period (Nordic flow-based market coupling from delivery day 2024-10-30 CET): FI also
+# counts as coupled with SE1 / SE3 when the spread is <= tolerance_eur AND that border has at least
+# min_spare_mw of spare import capacity. Why: under NTC (2023-01 .. 2024-10-29) coupled zones had
+# exactly equal prices (FI = SE1 to the cent in 63% of hours; spreads 0.01-2 EUR/MWh in ~2%), while
+# under flow-based exact equality fell to 9% and spreads 0.01-2 EUR/MWh rose to ~40% of hours.
+# Flow-based coupling leaves small spreads between zones that are not really congested.
+# min_spare_mw = 300: the extra load being tested would still fit through the border.
+flow_based_rule:
+  enabled: true
+  from: 2024-10-29T23:00Z  # = 2024-10-30 00:00 CET (UTC+1), first flow-based delivery day
+  tolerance_eur: 2.0
+  min_spare_mw: 300
+
+# Imports count as "near capacity" when imports from SE1 + SE3 >= this share of their capacity.
+near_capacity_share: 0.9
+
+# Import capacity into Finland (MW). Source: Fingrid official day-ahead transmission capacity
+# (datasets 24 SE1-FI, 25 SE3-FI, 112 EE-FI) up to official_until. The Nordic day-ahead market
+# moved to flow-based market coupling on 2024-10-29, after which Fingrid no longer publishes
+# NTC values for SE1-FI and SE3-FI (the series end with stray zeros in Jan 2025, ignored). Under
+# flow-based coupling there is no single border capacity, so the fixed values below are
+# approximations, used only for the "near capacity" test and the import headroom.
+capacity_fallback:
+  SE1:
+    official_until: 2024-10-29T23:00Z
+    steps:
+      - from: 2024-10-30T00:00Z
+        mw: 1500
+        source: >
+          p90 of Fingrid official SE1-FI values in the 12 months before 2024-10-29 (1,504 MW);
+          2019-2022 typical value 1,530-1,540 MW; max observed import 2024-10-29..2025-11-13 was
+          1,630 MW. (2023-24 official values were often lower, ~1,250 MW, during outages.)
+      - from: 2025-11-14T09:00Z
+        mw: 2000
+        source: >
+          Aurora Line (second 400 kV SE1-FI line) in service: first hour with import > 1,650 MW
+          was 2025-11-14 09:00 UTC; max observed import Nov-Dec 2025 2,000 MW (p99 1,929 MW).
+          Conservative: the nominal capacity increase is reported to be larger.
+  SE3:
+    official_until: 2024-10-29T23:00Z
+    steps:
+      - from: 2024-10-30T00:00Z
+        mw: 1200
+        source: Fenno-Skan; Fingrid official SE3-FI value in 2019-2024 (mode 1,200 MW every year).
+  EE:
+    # official values published throughout (Estlink 1+2: 1,016 MW; 358/658 MW during Estlink 2
+    # outages in 2024-2025); no fallback needed.
+    official_until: null
+    steps: []
+
+# Years whose regime shares are reported (in addition to the fit and preview years).
+report_years: [2019, 2020, 2021, 2022, 2023, 2024, 2025]

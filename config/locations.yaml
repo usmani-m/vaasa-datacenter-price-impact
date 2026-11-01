@@ -1,0 +1,30 @@
+# Weather points for the renewables model. ASSUMPTION: a handful of points stands in for
+# national wind / solar output; the model is calibrated against Fingrid production, so the
+# points need to track the weather where capacity is, not represent each park.
+#
+# Coordinates are approximate town/area centres (WGS84). Open-Meteo snaps them to the nearest
+# ERA5 grid cell (0.25 deg, ~25 km); the cell actually used is stored with the fetched data.
+#
+# Wind areas: Ostrobothnia coast, South Ostrobothnia inland and North Ostrobothnia hold most
+# Finnish wind capacity. Renewables Finland, "Wind Power Year 2024" (2025):
+# North Ostrobothnia ~40% of national capacity at end-2024; Kurikka the largest municipality
+# for new capacity in 2024 (314 MW).
+# https://suomenuusiutuvat.fi/en/wind-power-year-2024-finlands-wind-power-capacity-grew-by-20
+
+wind:
+  kristinestad:   {lat: 62.27, lon: 21.38, note: Ostrobothnia south coast}
+  pori_coast:     {lat: 61.48, lon: 21.80, note: Satakunta coast}
+  kurikka:        {lat: 62.62, lon: 22.40, note: South Ostrobothnia inland; most new capacity in 2024}
+  lapua_kauhava:  {lat: 62.97, lon: 23.00, note: South Ostrobothnia inland}
+  kalajoki:       {lat: 64.26, lon: 23.95, note: North Ostrobothnia coast}
+  raahe:          {lat: 64.68, lon: 24.48, note: North Ostrobothnia coast (Raahe/Siikajoki/Pyhajoki)}
+  haapavesi:      {lat: 64.14, lon: 25.37, note: North Ostrobothnia inland (Haapavesi/Karsamaki/Siikalatva)}
+  ii:             {lat: 65.32, lon: 25.37, note: North Ostrobothnia coast}
+  simo:           {lat: 65.66, lon: 25.06, note: Lapland coast}
+
+solar:
+  helsinki: {lat: 60.17, lon: 24.94}
+  turku:    {lat: 60.45, lon: 22.27}
+  tampere:  {lat: 61.50, lon: 23.76}
+  vaasa:    {lat: 63.10, lon: 21.62}
+  oulu:     {lat: 65.01, lon: 25.47}

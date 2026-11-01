@@ -1,0 +1,76 @@
+# Known data issues, applied by src/process/build_hourly_table.py.
+#
+# suspect:               bad data. Flag "suspect" on the listed series; kept in the table,
+#                        excluded from all model fitting.
+# curtailment:           data fine, but wind output was held back (confirmed by non-positive
+#                        prices). Boolean column curtailment; excluded from WIND fitting
+#                        only. Flags are not changed.
+# unexplained:           noted for follow-up only; no effect on the table or models.
+#
+# In addition, build_hourly_table.py marks as "suspect" any run of 6+ identical hourly values
+# (frozen data; see FLAT_RUN_H), so those are not listed here.
+
+# Hours listed here stay in the table with flag "suspect" and are excluded from model fitting.
+# start/end are hour-start labels in UTC, both INCLUSIVE.
+# Derived series (other, residual_load) also inherit "suspect" from their inputs.
+
+suspect:
+  - series: [wind, production, consumption, residual_load]
+    start: 2024-07-12T22:00Z
+    end: 2024-07-13T00:00Z
+    reason: >
+      Fingrid wind (75) jumps from ~1,100 to ~2,750 MW from 22:45 to 00:15 UTC while ERA5
+      100 m wind speed stays at 4-5 m/s; production and consumption jump by the same amount,
+      net import does not. Coincides with the real-time outage that blanked nuclear (188)
+      and hydro (191) 2024-07-12 18:00 - 2024-07-13 08:00. The 00:00 hour is included
+      because its first 15-min interval (1,301 MW) is still elevated.
+
+  - series: [price]
+    start: 2023-11-24T13:00Z
+    end: 2023-11-24T22:00Z
+    reason: >
+      FI day-ahead price -500 EUR/MWh (the auction floor) for 10 hours, widely reported as the
+      result of a bidding error rather than market conditions. Excluded from the price model.
+
+curtailment:
+  # Found by the 2024 renewables run: contiguous blocks where wind_cf is below the out-of-fold
+  # logistic prediction by more than 4 robust sigma, around hours beyond 5 sigma. All sunny summer
+  # middays at ~8-11 m/s (actual ~0.2-0.4 cf vs predicted ~0.5-0.7).
+  # CONFIRMED with ENTSO-E prices: FI day-ahead price was negative in all 18 hours
+  # (-3.00 to -20.01 EUR/MWh).
+  - start: 2024-08-10T08:00Z
+    end: 2024-08-10T13:00Z
+  - start: 2024-08-24T09:00Z
+    end: 2024-08-24T14:00Z
+  - start: 2024-08-25T08:00Z
+    end: 2024-08-25T13:00Z
+
+unexplained:
+  # Large unexplained hour-to-hour jumps in wind_cf from the ramp check (> 8 robust sigma,
+  # 2024 run). NOT labelled and NOT excluded from anything; to check against prices (ENTSO-E).
+  - time: 2024-03-18T07:00Z
+    series: wind
+    note: >
+      ramp z = -10.2 (actual 0.44 vs predicted 0.49 cf). Prices: wind fell ~1,560 MW at a steady
+      ~8 m/s while the price rose 48 -> 91 EUR/MWh; the price looks like a consequence (lost
+      output), not the cause. Still unexplained (trip, icing or curtailment for another reason).
+  - time: 2024-11-16T12:00Z
+    series: wind
+    note: >
+      ramp z = +10.5 (actual 0.50 vs predicted 0.40 cf). Prices: ~0 EUR/MWh at 10-11 UTC (0.00,
+      0.01), 0.34 at 12 UTC; wind jumped ~1,170 MW at lower wind speed. Consistent with
+      curtailment at zero price ending.
+  - time: 2024-11-25T04:00Z
+    series: wind
+    note: >
+      ramp z = +8.8 (actual 0.74 vs predicted 0.74 cf). Prices: -1.18 and -0.12 EUR/MWh at 02-03
+      UTC, positive from 04 UTC; wind jumped ~1,500 MW at a steady 13.6 m/s. Consistent with
+      curtailment at negative prices ending (the hours before were held back).
+  - start: 2023-06-13T13:00Z
+    end: 2023-10-31T23:00Z
+    series: [consumption, production, wind, net_import]
+    note: >
+      After Fingrid's switch to 15-min data. Besides the frozen runs (already suspect), the
+      balance consumption - production - net_import is off by 150-650 MW on average per month
+      in clean hours (vs ~11 MW from Nov 2023). DECIDED (2026-10-29): not labelled as a period;
+      only the flat-run hours inside it are suspect (automatic flat-run check).

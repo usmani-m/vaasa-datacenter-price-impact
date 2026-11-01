@@ -1,0 +1,1493 @@
+{
+  "fit_years": [
+    2023,
+    2024,
+    2025
+  ],
+  "preview_years": [
+    2023,
+    2024,
+    2025
+  ],
+  "added_mw": 300.0,
+  "config": {
+    "price_tolerance_eur": 0.5,
+    "flow_based_rule": {
+      "enabled": true,
+      "from": "2024-10-29T23:00Z",
+      "tolerance_eur": 2.0,
+      "min_spare_mw": 300
+    },
+    "near_capacity_share": 0.9,
+    "capacity_fallback": {
+      "SE1": {
+        "official_until": "2024-10-29T23:00Z",
+        "steps": [
+          {
+            "from": "2024-10-30T00:00Z",
+            "mw": 1500,
+            "source": "p90 of Fingrid official SE1-FI values in the 12 months before 2024-10-29 (1,504 MW); 2019-2022 typical value 1,530-1,540 MW; max observed import 2024-10-29..2025-11-13 was 1,630 MW. (2023-24 official values were often lower, ~1,250 MW, during outages.)\n"
+          },
+          {
+            "from": "2025-11-14T09:00Z",
+            "mw": 2000,
+            "source": "Aurora Line (second 400 kV SE1-FI line) in service: first hour with import > 1,650 MW was 2025-11-14 09:00 UTC; max observed import Nov-Dec 2025 2,000 MW (p99 1,929 MW). Conservative: the nominal capacity increase is reported to be larger.\n"
+          }
+        ]
+      },
+      "SE3": {
+        "official_until": "2024-10-29T23:00Z",
+        "steps": [
+          {
+            "from": "2024-10-30T00:00Z",
+            "mw": 1200,
+            "source": "Fenno-Skan; Fingrid official SE3-FI value in 2019-2024 (mode 1,200 MW every year)."
+          }
+        ]
+      },
+      "EE": {
+        "official_until": null,
+        "steps": []
+      }
+    },
+    "report_years": [
+      2019,
+      2020,
+      2021,
+      2022,
+      2023,
+      2024,
+      2025
+    ]
+  },
+  "central_variant": "gbm",
+  "variants": {
+    "binned": [
+      "binned",
+      "binned"
+    ],
+    "gbm": [
+      "gbm",
+      "gbm"
+    ],
+    "structural": [
+      "structural",
+      "gbm"
+    ]
+  },
+  "regime_share_pct": {
+    "2019": {
+      "coupled": 60.96,
+      "coupled_se3": 2.89,
+      "import_constrained": 26.02,
+      "separated_other": 10.14,
+      "export_constrained": 0.0,
+      "unknown": 0
+    },
+    "2020": {
+      "coupled": 38.68,
+      "coupled_se3": 17.93,
+      "import_constrained": 28.04,
+      "separated_other": 15.35,
+      "export_constrained": 0.0,
+      "unknown": 0
+    },
+    "2021": {
+      "coupled": 40.74,
+      "coupled_se3": 31.59,
+      "import_constrained": 14.11,
+      "separated_other": 13.56,
+      "export_constrained": 0.0,
+      "unknown": 0
+    },
+    "2022": {
+      "coupled": 27.04,
+      "coupled_se3": 31.86,
+      "import_constrained": 18.6,
+      "separated_other": 22.5,
+      "export_constrained": 0.0,
+      "unknown": 0
+    },
+    "2023": {
+      "coupled": 66.64,
+      "coupled_se3": 13.37,
+      "import_constrained": 3.98,
+      "separated_other": 13.92,
+      "export_constrained": 2.09,
+      "unknown": 0
+    },
+    "2024": {
+      "coupled": 58.36,
+      "coupled_se3": 7.46,
+      "import_constrained": 5.82,
+      "separated_other": 24.29,
+      "export_constrained": 4.08,
+      "unknown": 0
+    },
+    "2025": {
+      "coupled": 48.69,
+      "coupled_se3": 4.69,
+      "import_constrained": 2.95,
+      "separated_other": 43.06,
+      "export_constrained": 0.62,
+      "unknown": 0
+    }
+  },
+  "coupled_cv_mae": {
+    "gbm (no SE1 price)": 13.80940142444621,
+    "gbm + SE1 price": 0.5565217505580392
+  },
+  "slope_per_100mw_by_regime": {
+    "coupled": {
+      "full-sample binned": 1.8162,
+      "full-sample gbm": 1.8775,
+      "own-regime binned": 1.1827,
+      "own-regime gbm": 1.2238,
+      "own-regime gbm_se1": 0.0111,
+      "hours": 14364.0,
+      "mean price": 24.0244
+    },
+    "coupled_se3": {
+      "full-sample binned": 2.4705,
+      "full-sample gbm": 3.8415,
+      "own-regime binned": NaN,
+      "own-regime gbm": NaN,
+      "own-regime gbm_se1": NaN,
+      "hours": 2213.0,
+      "mean price": 85.6762
+    },
+    "import_constrained": {
+      "full-sample binned": 2.9843,
+      "full-sample gbm": 4.6301,
+      "own-regime binned": 1.457,
+      "own-regime gbm": 3.2639,
+      "own-regime gbm_se1": NaN,
+      "hours": 1118.0,
+      "mean price": 91.9864
+    },
+    "export_constrained": {
+      "full-sample binned": 0.6098,
+      "full-sample gbm": 0.6489,
+      "own-regime binned": 0.3614,
+      "own-regime gbm": 0.3651,
+      "own-regime gbm_se1": NaN,
+      "hours": 585.0,
+      "mean price": 2.2224
+    },
+    "separated_other": {
+      "full-sample binned": 3.1604,
+      "full-sample gbm": 4.0203,
+      "own-regime binned": NaN,
+      "own-regime gbm": NaN,
+      "own-regime gbm_se1": NaN,
+      "hours": 7014.0,
+      "mean price": 82.1854
+    }
+  },
+  "structural_check": {
+    "all fit years": {
+      "coupled hours": 16577.0,
+      "FI load share": 0.4689,
+      "binned: coupled-hour slope": 1.2497,
+      "binned: share x import-constr. slope": 0.6831,
+      "binned: share x Finnish curve at the hour": 0.1553,
+      "gbm: coupled-hour slope": 1.4107,
+      "gbm: share x import-constr. slope": 1.5303,
+      "gbm: share x Finnish curve at the hour": 0.528
+    },
+    "2023": {
+      "coupled hours": 6153.0,
+      "FI load share": 0.4586,
+      "binned: coupled-hour slope": 1.7063,
+      "binned: share x import-constr. slope": 0.6682,
+      "binned: share x Finnish curve at the hour": 0.0665,
+      "gbm: coupled-hour slope": 1.8312,
+      "gbm: share x import-constr. slope": 1.4968,
+      "gbm: share x Finnish curve at the hour": 0.6062
+    },
+    "2024": {
+      "coupled hours": 5751.0,
+      "FI load share": 0.4685,
+      "binned: coupled-hour slope": 1.0363,
+      "binned: share x import-constr. slope": 0.6825,
+      "binned: share x Finnish curve at the hour": 0.3038,
+      "gbm: coupled-hour slope": 1.1249,
+      "gbm: share x import-constr. slope": 1.529,
+      "gbm: share x Finnish curve at the hour": 0.5178
+    },
+    "2025": {
+      "coupled hours": 4673.0,
+      "FI load share": 0.4828,
+      "binned: coupled-hour slope": 0.911,
+      "binned: share x import-constr. slope": 0.7035,
+      "binned: share x Finnish curve at the hour": 0.0896,
+      "gbm: coupled-hour slope": 1.2087,
+      "gbm: share x import-constr. slope": 1.5759,
+      "gbm: share x Finnish curve at the hour": 0.4375
+    }
+  },
+  "year_comparison": {
+    "2023": {
+      "actual mean price": 56.4649,
+      "old upper bound": 9.1288,
+      "central": 6.1649,
+      "range low": 3.4207,
+      "range high": 6.1649,
+      "% coupled (incl. SE3-only)": 80.0023,
+      "coupled h switching": 348.0,
+      "share of +MW met by imports in coupled h %": 97.1915,
+      "median headroom in coupled h (MW)": 2031.5,
+      "mean SE1+SE3+EE import cap (MW)": 3251.4122,
+      "mean new binned": 4.3736,
+      "mean new gbm": 6.1649,
+      "mean new structural": 3.4207,
+      "mean old binned": 7.5556,
+      "mean old gbm": 9.1288
+    },
+    "2024": {
+      "actual mean price": 45.6817,
+      "old upper bound": 8.386,
+      "central": 4.6675,
+      "range low": 3.3553,
+      "range high": 4.6675,
+      "% coupled (incl. SE3-only)": 65.6957,
+      "coupled h switching": 442.0,
+      "share of +MW met by imports in coupled h %": 95.84,
+      "median headroom in coupled h (MW)": 1551.4025,
+      "mean SE1+SE3+EE import cap (MW)": 2755.215,
+      "mean new binned": 3.3553,
+      "mean new gbm": 4.6675,
+      "mean new structural": 3.4969,
+      "mean old binned": 6.3166,
+      "mean old gbm": 8.386
+    },
+    "2025": {
+      "actual mean price": 40.5072,
+      "old upper bound": 7.8915,
+      "central": 5.2098,
+      "range low": 2.0939,
+      "range high": 5.2098,
+      "% coupled (incl. SE3-only)": 53.3752,
+      "coupled h switching": 143.0,
+      "share of +MW met by imports in coupled h %": 98.6336,
+      "median headroom in coupled h (MW)": 1635.69,
+      "mean SE1+SE3+EE import cap (MW)": 3408.355,
+      "mean new binned": 2.0939,
+      "mean new gbm": 5.2098,
+      "mean new structural": 3.933,
+      "mean old binned": 7.3671,
+      "mean old gbm": 7.8915
+    }
+  },
+  "by_year": {
+    "2023": {
+      "by_month": {
+        "1": {
+          "old binned": 8.449,
+          "old gbm": 6.87,
+          "new binned": 7.528,
+          "new gbm": 6.384,
+          "new structural": 2.835,
+          "new min": 2.835,
+          "new max": 7.528,
+          "coupled %": 82.527
+        },
+        "2": {
+          "old binned": 7.84,
+          "old gbm": 7.95,
+          "new binned": 4.644,
+          "new gbm": 6.916,
+          "new structural": 4.32,
+          "new min": 4.32,
+          "new max": 6.916,
+          "coupled %": 66.22
+        },
+        "3": {
+          "old binned": 6.838,
+          "old gbm": 7.782,
+          "new binned": 4.232,
+          "new gbm": 6.935,
+          "new structural": 3.441,
+          "new min": 3.441,
+          "new max": 6.935,
+          "coupled %": 76.581
+        },
+        "4": {
+          "old binned": 6.928,
+          "old gbm": 7.834,
+          "new binned": 5.322,
+          "new gbm": 5.716,
+          "new structural": 2.533,
+          "new min": 2.533,
+          "new max": 5.716,
+          "coupled %": 97.083
+        },
+        "5": {
+          "old binned": 6.295,
+          "old gbm": 7.632,
+          "new binned": 4.883,
+          "new gbm": 5.183,
+          "new structural": 1.692,
+          "new min": 1.692,
+          "new max": 5.183,
+          "coupled %": 94.892
+        },
+        "6": {
+          "old binned": 8.627,
+          "old gbm": 5.463,
+          "new binned": 6.419,
+          "new gbm": 3.693,
+          "new structural": 2.322,
+          "new min": 2.322,
+          "new max": 6.419,
+          "coupled %": 92.361
+        },
+        "7": {
+          "old binned": 8.428,
+          "old gbm": 3.142,
+          "new binned": 5.093,
+          "new gbm": 2.791,
+          "new structural": 1.347,
+          "new min": 1.347,
+          "new max": 5.093,
+          "coupled %": 96.505
+        },
+        "8": {
+          "old binned": 12.255,
+          "old gbm": 12.723,
+          "new binned": 1.993,
+          "new gbm": 7.006,
+          "new structural": 6.662,
+          "new min": 1.993,
+          "new max": 7.006,
+          "coupled %": 57.661
+        },
+        "9": {
+          "old binned": 8.345,
+          "old gbm": 10.719,
+          "new binned": 1.128,
+          "new gbm": 5.457,
+          "new structural": 4.88,
+          "new min": 1.128,
+          "new max": 5.457,
+          "coupled %": 74.722
+        },
+        "10": {
+          "old binned": 4.073,
+          "old gbm": 11.938,
+          "new binned": 1.628,
+          "new gbm": 7.537,
+          "new structural": 3.524,
+          "new min": 1.628,
+          "new max": 7.537,
+          "coupled %": 78.812
+        },
+        "11": {
+          "old binned": 6.963,
+          "old gbm": 12.708,
+          "new binned": 4.501,
+          "new gbm": 8.703,
+          "new structural": 3.18,
+          "new min": 3.18,
+          "new max": 8.703,
+          "coupled %": 72.083
+        },
+        "12": {
+          "old binned": 5.66,
+          "old gbm": 14.689,
+          "new binned": 5.122,
+          "new gbm": 7.701,
+          "new structural": 4.376,
+          "new min": 4.376,
+          "new max": 7.701,
+          "coupled %": 69.758
+        }
+      },
+      "by_hour": {
+        "0": {
+          "old binned": 6.641,
+          "old gbm": 6.776,
+          "new binned": 4.18,
+          "new gbm": 5.189,
+          "new structural": 2.423,
+          "new min": 2.423,
+          "new max": 5.189,
+          "coupled %": 87.397
+        },
+        "1": {
+          "old binned": 6.267,
+          "old gbm": 5.998,
+          "new binned": 4.14,
+          "new gbm": 4.596,
+          "new structural": 2.062,
+          "new min": 2.062,
+          "new max": 4.596,
+          "coupled %": 85.479
+        },
+        "2": {
+          "old binned": 6.096,
+          "old gbm": 5.598,
+          "new binned": 3.704,
+          "new gbm": 4.159,
+          "new structural": 1.874,
+          "new min": 1.874,
+          "new max": 4.159,
+          "coupled %": 84.11
+        },
+        "3": {
+          "old binned": 6.057,
+          "old gbm": 5.51,
+          "new binned": 3.648,
+          "new gbm": 3.982,
+          "new structural": 1.72,
+          "new min": 1.72,
+          "new max": 3.982,
+          "coupled %": 85.479
+        },
+        "4": {
+          "old binned": 5.911,
+          "old gbm": 5.524,
+          "new binned": 3.678,
+          "new gbm": 3.984,
+          "new structural": 1.929,
+          "new min": 1.929,
+          "new max": 3.984,
+          "coupled %": 84.932
+        },
+        "5": {
+          "old binned": 6.365,
+          "old gbm": 6.165,
+          "new binned": 3.805,
+          "new gbm": 4.48,
+          "new structural": 2.321,
+          "new min": 2.321,
+          "new max": 4.48,
+          "coupled %": 83.288
+        },
+        "6": {
+          "old binned": 7.29,
+          "old gbm": 7.423,
+          "new binned": 4.594,
+          "new gbm": 5.196,
+          "new structural": 2.801,
+          "new min": 2.801,
+          "new max": 5.196,
+          "coupled %": 78.356
+        },
+        "7": {
+          "old binned": 7.778,
+          "old gbm": 9.026,
+          "new binned": 4.408,
+          "new gbm": 5.658,
+          "new structural": 3.377,
+          "new min": 3.377,
+          "new max": 5.658,
+          "coupled %": 75.616
+        },
+        "8": {
+          "old binned": 7.96,
+          "old gbm": 10.41,
+          "new binned": 4.275,
+          "new gbm": 7.125,
+          "new structural": 4.156,
+          "new min": 4.156,
+          "new max": 7.125,
+          "coupled %": 76.986
+        },
+        "9": {
+          "old binned": 7.806,
+          "old gbm": 10.652,
+          "new binned": 4.595,
+          "new gbm": 7.238,
+          "new structural": 4.484,
+          "new min": 4.484,
+          "new max": 7.238,
+          "coupled %": 77.26
+        },
+        "10": {
+          "old binned": 8.071,
+          "old gbm": 11.151,
+          "new binned": 4.81,
+          "new gbm": 7.168,
+          "new structural": 4.144,
+          "new min": 4.144,
+          "new max": 7.168,
+          "coupled %": 76.438
+        },
+        "11": {
+          "old binned": 8.269,
+          "old gbm": 10.016,
+          "new binned": 4.751,
+          "new gbm": 7.222,
+          "new structural": 4.323,
+          "new min": 4.323,
+          "new max": 7.222,
+          "coupled %": 75.068
+        },
+        "12": {
+          "old binned": 8.134,
+          "old gbm": 10.736,
+          "new binned": 4.621,
+          "new gbm": 7.244,
+          "new structural": 4.507,
+          "new min": 4.507,
+          "new max": 7.244,
+          "coupled %": 74.176
+        },
+        "13": {
+          "old binned": 8.114,
+          "old gbm": 10.704,
+          "new binned": 4.44,
+          "new gbm": 7.305,
+          "new structural": 4.698,
+          "new min": 4.44,
+          "new max": 7.305,
+          "coupled %": 74.451
+        },
+        "14": {
+          "old binned": 8.179,
+          "old gbm": 10.66,
+          "new binned": 4.356,
+          "new gbm": 6.79,
+          "new structural": 4.112,
+          "new min": 4.112,
+          "new max": 6.79,
+          "coupled %": 75.0
+        },
+        "15": {
+          "old binned": 8.271,
+          "old gbm": 9.921,
+          "new binned": 4.134,
+          "new gbm": 6.222,
+          "new structural": 3.563,
+          "new min": 3.563,
+          "new max": 6.222,
+          "coupled %": 75.275
+        },
+        "16": {
+          "old binned": 8.192,
+          "old gbm": 10.77,
+          "new binned": 4.514,
+          "new gbm": 7.045,
+          "new structural": 3.805,
+          "new min": 3.805,
+          "new max": 7.045,
+          "coupled %": 76.438
+        },
+        "17": {
+          "old binned": 8.562,
+          "old gbm": 10.902,
+          "new binned": 4.78,
+          "new gbm": 7.003,
+          "new structural": 3.746,
+          "new min": 3.746,
+          "new max": 7.003,
+          "coupled %": 77.26
+        },
+        "18": {
+          "old binned": 8.476,
+          "old gbm": 11.294,
+          "new binned": 4.819,
+          "new gbm": 7.554,
+          "new structural": 4.167,
+          "new min": 4.167,
+          "new max": 7.554,
+          "coupled %": 78.904
+        },
+        "19": {
+          "old binned": 8.423,
+          "old gbm": 11.63,
+          "new binned": 4.539,
+          "new gbm": 7.264,
+          "new structural": 4.309,
+          "new min": 4.309,
+          "new max": 7.264,
+          "coupled %": 78.904
+        },
+        "20": {
+          "old binned": 7.879,
+          "old gbm": 11.252,
+          "new binned": 4.422,
+          "new gbm": 7.033,
+          "new structural": 4.032,
+          "new min": 4.032,
+          "new max": 7.033,
+          "coupled %": 81.644
+        },
+        "21": {
+          "old binned": 7.762,
+          "old gbm": 9.768,
+          "new binned": 4.734,
+          "new gbm": 6.766,
+          "new structural": 3.268,
+          "new min": 3.268,
+          "new max": 6.766,
+          "coupled %": 86.027
+        },
+        "22": {
+          "old binned": 7.574,
+          "old gbm": 9.197,
+          "new binned": 4.514,
+          "new gbm": 6.085,
+          "new structural": 3.226,
+          "new min": 3.226,
+          "new max": 6.085,
+          "coupled %": 85.205
+        },
+        "23": {
+          "old binned": 7.267,
+          "old gbm": 8.024,
+          "new binned": 4.505,
+          "new gbm": 5.656,
+          "new structural": 3.058,
+          "new min": 3.058,
+          "new max": 5.656,
+          "coupled %": 86.301
+        }
+      },
+      "by_regime": {
+        "coupled": {
+          "new binned": 4.895,
+          "new gbm": 4.873,
+          "new structural": 1.833,
+          "old binned": 7.363,
+          "old gbm": 7.135
+        },
+        "coupled_se3": {
+          "new binned": 5.771,
+          "new gbm": 8.668,
+          "new structural": 3.287,
+          "old binned": 7.919,
+          "old gbm": 11.65
+        },
+        "export_constrained": {
+          "new binned": 0.719,
+          "new gbm": 1.016,
+          "new structural": 1.016,
+          "old binned": 1.956,
+          "old gbm": 2.724
+        },
+        "import_constrained": {
+          "new binned": 3.466,
+          "new gbm": 9.242,
+          "new structural": 9.242,
+          "old binned": 8.174,
+          "old gbm": 15.219
+        },
+        "separated_other": {
+          "new binned": 1.349,
+          "new gbm": 9.847,
+          "new structural": 9.847,
+          "old binned": 8.794,
+          "old gbm": 15.483
+        }
+      }
+    },
+    "2024": {
+      "by_month": {
+        "1": {
+          "old binned": 9.096,
+          "old gbm": 13.134,
+          "new binned": 1.981,
+          "new gbm": 5.127,
+          "new structural": 2.951,
+          "new min": 1.981,
+          "new max": 5.127,
+          "coupled %": 55.78
+        },
+        "2": {
+          "old binned": 5.279,
+          "old gbm": 10.723,
+          "new binned": 2.037,
+          "new gbm": 5.36,
+          "new structural": 3.01,
+          "new min": 2.037,
+          "new max": 5.36,
+          "coupled %": 71.839
+        },
+        "3": {
+          "old binned": 4.992,
+          "old gbm": 5.583,
+          "new binned": 4.14,
+          "new gbm": 4.836,
+          "new structural": 3.66,
+          "new min": 3.66,
+          "new max": 4.836,
+          "coupled %": 69.448
+        },
+        "4": {
+          "old binned": 6.656,
+          "old gbm": 7.431,
+          "new binned": 5.94,
+          "new gbm": 5.548,
+          "new structural": 3.133,
+          "new min": 3.133,
+          "new max": 5.94,
+          "coupled %": 86.528
+        },
+        "5": {
+          "old binned": 6.804,
+          "old gbm": 13.51,
+          "new binned": 5.214,
+          "new gbm": 7.338,
+          "new structural": 6.355,
+          "new min": 5.214,
+          "new max": 7.338,
+          "coupled %": 67.473
+        },
+        "6": {
+          "old binned": 7.698,
+          "old gbm": 10.823,
+          "new binned": 6.45,
+          "new gbm": 5.611,
+          "new structural": 5.222,
+          "new min": 5.222,
+          "new max": 6.45,
+          "coupled %": 57.361
+        },
+        "7": {
+          "old binned": 3.507,
+          "old gbm": 6.401,
+          "new binned": 3.577,
+          "new gbm": 3.124,
+          "new structural": 3.108,
+          "new min": 3.108,
+          "new max": 3.577,
+          "coupled %": 72.702
+        },
+        "8": {
+          "old binned": 2.372,
+          "old gbm": 4.312,
+          "new binned": 1.781,
+          "new gbm": 3.442,
+          "new structural": 2.377,
+          "new min": 1.781,
+          "new max": 3.442,
+          "coupled %": 82.124
+        },
+        "9": {
+          "old binned": 12.239,
+          "old gbm": 8.002,
+          "new binned": 3.529,
+          "new gbm": 4.445,
+          "new structural": 4.305,
+          "new min": 3.529,
+          "new max": 4.445,
+          "coupled %": 41.528
+        },
+        "10": {
+          "old binned": 7.803,
+          "old gbm": 6.21,
+          "new binned": 2.884,
+          "new gbm": 3.371,
+          "new structural": 2.667,
+          "new min": 2.667,
+          "new max": 3.371,
+          "coupled %": 67.671
+        },
+        "11": {
+          "old binned": 5.204,
+          "old gbm": 7.101,
+          "new binned": 1.448,
+          "new gbm": 3.331,
+          "new structural": 2.413,
+          "new min": 1.448,
+          "new max": 3.331,
+          "coupled %": 50.417
+        },
+        "12": {
+          "old binned": 4.262,
+          "old gbm": 7.462,
+          "new binned": 1.321,
+          "new gbm": 4.475,
+          "new structural": 2.741,
+          "new min": 1.321,
+          "new max": 4.475,
+          "coupled %": 65.188
+        }
+      },
+      "by_hour": {
+        "0": {
+          "old binned": 5.779,
+          "old gbm": 6.807,
+          "new binned": 3.026,
+          "new gbm": 3.484,
+          "new structural": 2.014,
+          "new min": 2.014,
+          "new max": 3.484,
+          "coupled %": 75.549
+        },
+        "1": {
+          "old binned": 5.316,
+          "old gbm": 5.501,
+          "new binned": 2.552,
+          "new gbm": 3.357,
+          "new structural": 1.995,
+          "new min": 1.995,
+          "new max": 3.357,
+          "coupled %": 72.527
+        },
+        "2": {
+          "old binned": 5.049,
+          "old gbm": 5.256,
+          "new binned": 2.42,
+          "new gbm": 2.875,
+          "new structural": 1.554,
+          "new min": 1.554,
+          "new max": 2.875,
+          "coupled %": 75.549
+        },
+        "3": {
+          "old binned": 5.038,
+          "old gbm": 4.673,
+          "new binned": 2.539,
+          "new gbm": 2.902,
+          "new structural": 1.576,
+          "new min": 1.576,
+          "new max": 2.902,
+          "coupled %": 77.747
+        },
+        "4": {
+          "old binned": 5.334,
+          "old gbm": 4.979,
+          "new binned": 2.687,
+          "new gbm": 2.83,
+          "new structural": 1.469,
+          "new min": 1.469,
+          "new max": 2.83,
+          "coupled %": 78.571
+        },
+        "5": {
+          "old binned": 5.597,
+          "old gbm": 5.731,
+          "new binned": 2.755,
+          "new gbm": 3.191,
+          "new structural": 1.798,
+          "new min": 1.798,
+          "new max": 3.191,
+          "coupled %": 77.747
+        },
+        "6": {
+          "old binned": 6.297,
+          "old gbm": 7.756,
+          "new binned": 3.08,
+          "new gbm": 3.862,
+          "new structural": 2.749,
+          "new min": 2.749,
+          "new max": 3.862,
+          "coupled %": 71.429
+        },
+        "7": {
+          "old binned": 6.538,
+          "old gbm": 9.038,
+          "new binned": 3.534,
+          "new gbm": 4.479,
+          "new structural": 3.419,
+          "new min": 3.419,
+          "new max": 4.479,
+          "coupled %": 65.385
+        },
+        "8": {
+          "old binned": 6.847,
+          "old gbm": 10.403,
+          "new binned": 3.39,
+          "new gbm": 6.146,
+          "new structural": 5.15,
+          "new min": 3.39,
+          "new max": 6.146,
+          "coupled %": 62.192
+        },
+        "9": {
+          "old binned": 6.99,
+          "old gbm": 10.455,
+          "new binned": 3.759,
+          "new gbm": 5.81,
+          "new structural": 4.992,
+          "new min": 3.759,
+          "new max": 5.81,
+          "coupled %": 59.726
+        },
+        "10": {
+          "old binned": 7.311,
+          "old gbm": 10.871,
+          "new binned": 3.567,
+          "new gbm": 5.511,
+          "new structural": 4.383,
+          "new min": 3.567,
+          "new max": 5.511,
+          "coupled %": 60.548
+        },
+        "11": {
+          "old binned": 7.018,
+          "old gbm": 10.661,
+          "new binned": 3.706,
+          "new gbm": 5.86,
+          "new structural": 4.864,
+          "new min": 3.706,
+          "new max": 5.86,
+          "coupled %": 58.904
+        },
+        "12": {
+          "old binned": 6.783,
+          "old gbm": 9.683,
+          "new binned": 3.633,
+          "new gbm": 5.765,
+          "new structural": 4.818,
+          "new min": 3.633,
+          "new max": 5.765,
+          "coupled %": 57.65
+        },
+        "13": {
+          "old binned": 6.465,
+          "old gbm": 8.414,
+          "new binned": 3.585,
+          "new gbm": 5.447,
+          "new structural": 4.515,
+          "new min": 3.585,
+          "new max": 5.447,
+          "coupled %": 57.65
+        },
+        "14": {
+          "old binned": 6.54,
+          "old gbm": 8.661,
+          "new binned": 3.353,
+          "new gbm": 5.16,
+          "new structural": 4.201,
+          "new min": 3.353,
+          "new max": 5.16,
+          "coupled %": 57.923
+        },
+        "15": {
+          "old binned": 6.57,
+          "old gbm": 9.253,
+          "new binned": 3.761,
+          "new gbm": 5.15,
+          "new structural": 4.194,
+          "new min": 3.761,
+          "new max": 5.15,
+          "coupled %": 60.383
+        },
+        "16": {
+          "old binned": 6.625,
+          "old gbm": 8.906,
+          "new binned": 4.072,
+          "new gbm": 5.042,
+          "new structural": 4.157,
+          "new min": 4.072,
+          "new max": 5.042,
+          "coupled %": 58.197
+        },
+        "17": {
+          "old binned": 6.542,
+          "old gbm": 8.15,
+          "new binned": 3.631,
+          "new gbm": 5.467,
+          "new structural": 4.535,
+          "new min": 3.631,
+          "new max": 5.467,
+          "coupled %": 58.356
+        },
+        "18": {
+          "old binned": 6.639,
+          "old gbm": 9.158,
+          "new binned": 3.656,
+          "new gbm": 5.545,
+          "new structural": 4.289,
+          "new min": 3.656,
+          "new max": 5.545,
+          "coupled %": 60.548
+        },
+        "19": {
+          "old binned": 6.671,
+          "old gbm": 10.363,
+          "new binned": 3.763,
+          "new gbm": 5.306,
+          "new structural": 4.095,
+          "new min": 3.763,
+          "new max": 5.306,
+          "coupled %": 60.548
+        },
+        "20": {
+          "old binned": 6.585,
+          "old gbm": 9.942,
+          "new binned": 3.875,
+          "new gbm": 5.192,
+          "new structural": 3.591,
+          "new min": 3.591,
+          "new max": 5.192,
+          "coupled %": 64.11
+        },
+        "21": {
+          "old binned": 6.319,
+          "old gbm": 9.736,
+          "new binned": 3.443,
+          "new gbm": 4.836,
+          "new structural": 3.24,
+          "new min": 3.24,
+          "new max": 4.836,
+          "coupled %": 69.231
+        },
+        "22": {
+          "old binned": 6.748,
+          "old gbm": 9.14,
+          "new binned": 3.396,
+          "new gbm": 4.873,
+          "new structural": 3.386,
+          "new min": 3.386,
+          "new max": 4.873,
+          "coupled %": 67.582
+        },
+        "23": {
+          "old binned": 5.977,
+          "old gbm": 7.676,
+          "new binned": 3.327,
+          "new gbm": 3.891,
+          "new structural": 2.897,
+          "new min": 2.897,
+          "new max": 3.891,
+          "coupled %": 68.956
+        }
+      },
+      "by_regime": {
+        "coupled": {
+          "new binned": 3.182,
+          "new gbm": 3.156,
+          "new structural": 1.659,
+          "old binned": 4.944,
+          "old gbm": 5.581
+        },
+        "coupled_se3": {
+          "new binned": 3.415,
+          "new gbm": 7.521,
+          "new structural": 3.521,
+          "old binned": 7.218,
+          "old gbm": 11.688
+        },
+        "export_constrained": {
+          "new binned": 0.898,
+          "new gbm": 1.188,
+          "new structural": 1.188,
+          "old binned": 2.379,
+          "old gbm": 2.068
+        },
+        "import_constrained": {
+          "new binned": 5.755,
+          "new gbm": 8.767,
+          "new structural": 8.767,
+          "old binned": 10.029,
+          "old gbm": 16.019
+        },
+        "separated_other": {
+          "new binned": 3.589,
+          "new gbm": 7.003,
+          "new structural": 7.003,
+          "old binned": 9.088,
+          "old gbm": 13.303
+        }
+      }
+    },
+    "2025": {
+      "by_month": {
+        "1": {
+          "old binned": 4.915,
+          "old gbm": 9.366,
+          "new binned": 2.501,
+          "new gbm": 6.004,
+          "new structural": 3.434,
+          "new min": 2.501,
+          "new max": 6.004,
+          "coupled %": 58.871
+        },
+        "2": {
+          "old binned": 5.122,
+          "old gbm": 9.506,
+          "new binned": 2.0,
+          "new gbm": 5.901,
+          "new structural": 4.396,
+          "new min": 2.0,
+          "new max": 5.901,
+          "coupled %": 50.893
+        },
+        "3": {
+          "old binned": 6.298,
+          "old gbm": 6.772,
+          "new binned": 1.969,
+          "new gbm": 5.533,
+          "new structural": 5.01,
+          "new min": 1.969,
+          "new max": 5.533,
+          "coupled %": 45.087
+        },
+        "4": {
+          "old binned": 9.42,
+          "old gbm": 12.017,
+          "new binned": 2.745,
+          "new gbm": 7.309,
+          "new structural": 6.107,
+          "new min": 2.745,
+          "new max": 7.309,
+          "coupled %": 45.972
+        },
+        "5": {
+          "old binned": 4.176,
+          "old gbm": 7.06,
+          "new binned": 2.593,
+          "new gbm": 5.471,
+          "new structural": 3.524,
+          "new min": 2.593,
+          "new max": 5.471,
+          "coupled %": 75.672
+        },
+        "6": {
+          "old binned": 5.411,
+          "old gbm": 9.317,
+          "new binned": 0.209,
+          "new gbm": 5.452,
+          "new structural": 4.135,
+          "new min": 0.209,
+          "new max": 5.452,
+          "coupled %": 67.5
+        },
+        "7": {
+          "old binned": 7.204,
+          "old gbm": 5.698,
+          "new binned": 2.228,
+          "new gbm": 4.088,
+          "new structural": 3.641,
+          "new min": 2.228,
+          "new max": 4.088,
+          "coupled %": 59.269
+        },
+        "8": {
+          "old binned": 14.275,
+          "old gbm": 6.187,
+          "new binned": 1.565,
+          "new gbm": 4.036,
+          "new structural": 3.22,
+          "new min": 1.565,
+          "new max": 4.036,
+          "coupled %": 48.253
+        },
+        "9": {
+          "old binned": 11.198,
+          "old gbm": 7.382,
+          "new binned": 0.856,
+          "new gbm": 4.504,
+          "new structural": 4.019,
+          "new min": 0.856,
+          "new max": 4.504,
+          "coupled %": 45.417
+        },
+        "10": {
+          "old binned": 9.334,
+          "old gbm": 6.222,
+          "new binned": 1.695,
+          "new gbm": 3.132,
+          "new structural": 2.841,
+          "new min": 1.695,
+          "new max": 3.132,
+          "coupled %": 36.107
+        },
+        "11": {
+          "old binned": 5.431,
+          "old gbm": 7.196,
+          "new binned": 2.569,
+          "new gbm": 4.765,
+          "new structural": 3.596,
+          "new min": 2.569,
+          "new max": 4.765,
+          "coupled %": 38.889
+        },
+        "12": {
+          "old binned": 5.463,
+          "old gbm": 8.256,
+          "new binned": 4.124,
+          "new gbm": 6.424,
+          "new structural": 3.388,
+          "new min": 3.388,
+          "new max": 6.424,
+          "coupled %": 67.876
+        }
+      },
+      "by_hour": {
+        "0": {
+          "old binned": 6.012,
+          "old gbm": 6.193,
+          "new binned": 2.223,
+          "new gbm": 3.937,
+          "new structural": 2.505,
+          "new min": 2.223,
+          "new max": 3.937,
+          "coupled %": 61.37
+        },
+        "1": {
+          "old binned": 5.1,
+          "old gbm": 5.207,
+          "new binned": 1.795,
+          "new gbm": 3.538,
+          "new structural": 2.367,
+          "new min": 1.795,
+          "new max": 3.538,
+          "coupled %": 64.11
+        },
+        "2": {
+          "old binned": 4.937,
+          "old gbm": 4.817,
+          "new binned": 1.88,
+          "new gbm": 3.346,
+          "new structural": 2.011,
+          "new min": 1.88,
+          "new max": 3.346,
+          "coupled %": 65.205
+        },
+        "3": {
+          "old binned": 4.946,
+          "old gbm": 4.67,
+          "new binned": 1.696,
+          "new gbm": 3.321,
+          "new structural": 2.17,
+          "new min": 1.696,
+          "new max": 3.321,
+          "coupled %": 66.849
+        },
+        "4": {
+          "old binned": 4.994,
+          "old gbm": 4.759,
+          "new binned": 1.7,
+          "new gbm": 3.155,
+          "new structural": 2.095,
+          "new min": 1.7,
+          "new max": 3.155,
+          "coupled %": 66.301
+        },
+        "5": {
+          "old binned": 5.507,
+          "old gbm": 5.358,
+          "new binned": 1.711,
+          "new gbm": 3.438,
+          "new structural": 2.191,
+          "new min": 1.711,
+          "new max": 3.438,
+          "coupled %": 67.945
+        },
+        "6": {
+          "old binned": 6.711,
+          "old gbm": 6.441,
+          "new binned": 2.317,
+          "new gbm": 5.02,
+          "new structural": 3.791,
+          "new min": 2.317,
+          "new max": 5.02,
+          "coupled %": 57.534
+        },
+        "7": {
+          "old binned": 7.174,
+          "old gbm": 8.284,
+          "new binned": 1.702,
+          "new gbm": 4.849,
+          "new structural": 3.847,
+          "new min": 1.702,
+          "new max": 4.849,
+          "coupled %": 49.315
+        },
+        "8": {
+          "old binned": 7.735,
+          "old gbm": 9.432,
+          "new binned": 1.931,
+          "new gbm": 5.968,
+          "new structural": 5.179,
+          "new min": 1.931,
+          "new max": 5.968,
+          "coupled %": 42.192
+        },
+        "9": {
+          "old binned": 8.29,
+          "old gbm": 9.368,
+          "new binned": 2.332,
+          "new gbm": 6.715,
+          "new structural": 5.626,
+          "new min": 2.332,
+          "new max": 6.715,
+          "coupled %": 41.644
+        },
+        "10": {
+          "old binned": 8.478,
+          "old gbm": 9.468,
+          "new binned": 2.41,
+          "new gbm": 6.156,
+          "new structural": 4.981,
+          "new min": 2.41,
+          "new max": 6.156,
+          "coupled %": 47.945
+        },
+        "11": {
+          "old binned": 8.508,
+          "old gbm": 9.043,
+          "new binned": 2.175,
+          "new gbm": 6.162,
+          "new structural": 4.622,
+          "new min": 2.175,
+          "new max": 6.162,
+          "coupled %": 50.959
+        },
+        "12": {
+          "old binned": 8.15,
+          "old gbm": 8.72,
+          "new binned": 1.864,
+          "new gbm": 5.685,
+          "new structural": 4.188,
+          "new min": 1.864,
+          "new max": 5.685,
+          "coupled %": 54.247
+        },
+        "13": {
+          "old binned": 8.487,
+          "old gbm": 8.1,
+          "new binned": 2.253,
+          "new gbm": 5.635,
+          "new structural": 4.257,
+          "new min": 2.253,
+          "new max": 5.635,
+          "coupled %": 54.521
+        },
+        "14": {
+          "old binned": 9.131,
+          "old gbm": 8.598,
+          "new binned": 2.562,
+          "new gbm": 6.497,
+          "new structural": 4.829,
+          "new min": 2.562,
+          "new max": 6.497,
+          "coupled %": 55.068
+        },
+        "15": {
+          "old binned": 9.013,
+          "old gbm": 8.251,
+          "new binned": 2.193,
+          "new gbm": 5.778,
+          "new structural": 4.347,
+          "new min": 2.193,
+          "new max": 5.778,
+          "coupled %": 55.89
+        },
+        "16": {
+          "old binned": 8.051,
+          "old gbm": 8.802,
+          "new binned": 2.116,
+          "new gbm": 5.518,
+          "new structural": 4.057,
+          "new min": 2.116,
+          "new max": 5.518,
+          "coupled %": 53.571
+        },
+        "17": {
+          "old binned": 7.908,
+          "old gbm": 9.162,
+          "new binned": 2.376,
+          "new gbm": 5.726,
+          "new structural": 4.435,
+          "new min": 2.376,
+          "new max": 5.726,
+          "coupled %": 48.901
+        },
+        "18": {
+          "old binned": 8.079,
+          "old gbm": 9.526,
+          "new binned": 2.361,
+          "new gbm": 5.922,
+          "new structural": 4.755,
+          "new min": 2.361,
+          "new max": 5.922,
+          "coupled %": 42.582
+        },
+        "19": {
+          "old binned": 8.026,
+          "old gbm": 9.859,
+          "new binned": 2.429,
+          "new gbm": 6.138,
+          "new structural": 5.025,
+          "new min": 2.429,
+          "new max": 6.138,
+          "coupled %": 40.385
+        },
+        "20": {
+          "old binned": 8.327,
+          "old gbm": 9.884,
+          "new binned": 1.921,
+          "new gbm": 6.21,
+          "new structural": 5.092,
+          "new min": 1.921,
+          "new max": 6.21,
+          "coupled %": 40.385
+        },
+        "21": {
+          "old binned": 8.288,
+          "old gbm": 9.633,
+          "new binned": 2.156,
+          "new gbm": 6.3,
+          "new structural": 4.736,
+          "new min": 2.156,
+          "new max": 6.3,
+          "coupled %": 47.671
+        },
+        "22": {
+          "old binned": 8.102,
+          "old gbm": 8.3,
+          "new binned": 2.029,
+          "new gbm": 5.612,
+          "new structural": 4.404,
+          "new min": 2.029,
+          "new max": 5.612,
+          "coupled %": 49.863
+        },
+        "23": {
+          "old binned": 6.867,
+          "old gbm": 7.544,
+          "new binned": 2.124,
+          "new gbm": 4.418,
+          "new structural": 2.888,
+          "new min": 2.124,
+          "new max": 4.418,
+          "coupled %": 56.438
+        }
+      },
+      "by_regime": {
+        "coupled": {
+          "new binned": 2.486,
+          "new gbm": 3.437,
+          "new structural": 1.327,
+          "old binned": 4.697,
+          "old gbm": 4.627
+        },
+        "coupled_se3": {
+          "new binned": 4.8,
+          "new gbm": 8.713,
+          "new structural": 3.389,
+          "old binned": 7.971,
+          "old gbm": 12.976
+        },
+        "export_constrained": {
+          "new binned": 0.227,
+          "new gbm": 0.938,
+          "new structural": 0.938,
+          "old binned": 1.294,
+          "old gbm": 1.957
+        },
+        "import_constrained": {
+          "new binned": 3.061,
+          "new gbm": 8.399,
+          "new structural": 8.399,
+          "old binned": 9.172,
+          "old gbm": 12.019
+        },
+        "separated_other": {
+          "new binned": 1.316,
+          "new gbm": 6.675,
+          "new structural": 6.675,
+          "old binned": 10.283,
+          "old gbm": 10.83
+        }
+      }
+    }
+  }
+}

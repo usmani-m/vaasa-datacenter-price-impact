@@ -7,3 +7,7 @@ pyarrow
 pvlib
 scikit-learn
 statsmodels
+holidays
+matplotlib
+scipy
+entsoe-py

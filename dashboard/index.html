@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Data Center Price Impact</title>
+  <meta name="description" content="How a large data center in Vaasa could affect Finnish day-ahead electricity prices: scenarios, historical data and method.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%232a78d6'/%3E%3Cpath d='M9 2 4 9h3l-1 5 5-7H8z' fill='white'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/style.css">
+  <script>
+    // theme before first paint: ?theme= (light|dark) > saved choice > system
+    (function () {
+      var q = new URLSearchParams(location.search).get("theme"), saved = null;
+      try { saved = localStorage.getItem("theme"); } catch (e) {}
+      var t = q || saved;
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    })();
+  </script>
+</head>
+<body>
+<header class="site-header">
+  <div class="wrap header-row">
+    <div>
+      <h1>Data Center Price Impact</h1>
+      <p class="subtitle">How a large data center in Vaasa could change Finnish day-ahead electricity prices</p>
+    </div>
+    <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch colour theme">Theme: auto</button>
+  </div>
+  <nav class="wrap tabs" role="tablist" aria-label="Sections">
+    <a role="tab" href="#impact" data-tab="impact">Impact</a>
+    <a role="tab" href="#system" data-tab="system">Finnish power system</a>
+    <a role="tab" href="#renewables" data-tab="renewables">Renewables</a>
+    <a role="tab" href="#method" data-tab="method">Method</a>
+  </nav>
+</header>
+
+<main class="wrap">
+  <!-- 1. Impact -->
+  <section id="tab-impact" class="tab-panel" role="tabpanel" aria-label="Impact">
+    <div class="controls card">
+      <label class="control control-size">
+        <span>Data center size: <strong id="size-label">300 MW</strong></span>
+        <input id="size" type="range" min="0" max="1000" step="100" value="300" aria-describedby="size-help">
+        <small id="size-help">Steps of 100 MW (precomputed grid)</small>
+      </label>
+      <label class="control">
+        <span>Market year</span>
+        <select id="year"></select>
+      </label>
+      <label class="control">
+        <span>Model variant</span>
+        <select id="variant">
+          <option value="central">Central (upper end)</option>
+          <option value="binned">Binned supply curve</option>
+          <option value="structural">Structural (low end)</option>
+        </select>
+      </label>
+      <label class="control control-toggle">
+        <input id="ppa" type="checkbox">
+        <span>Wind PPA matching the data center's annual energy</span>
+      </label>
+    </div>
+
+    <p id="upper-note" class="note warn" hidden>
+      Above about 500 MW these results are increasingly an upper bound: a demand increase this large would
+      attract new investment (generation, storage, transmission) and change import flows, and the model includes
+      neither.
+    </p>
+
+    <div class="cards">
+      <div class="card stat">
+        <div class="stat-label">Average price change</div>
+        <div class="stat-value" id="stat-dprice">–</div>
+        <div class="stat-sub" id="stat-dprice-sub">–</div>
+      </div>
+      <div class="card stat">
+        <div class="stat-label">Extra annual cost to consumers</div>
+        <div class="stat-value" id="stat-cost">–</div>
+        <div class="stat-sub">Wholesale transfer, full spot exposure</div>
+      </div>
+      <div class="card stat">
+        <div class="stat-label">PPA wind capacity</div>
+        <div class="stat-value" id="stat-ppa">–</div>
+        <div class="stat-sub" id="stat-ppa-sub">–</div>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <figure class="card chart-card">
+        <figcaption><h2>Price-duration curve</h2><p>Price exceeded in a given share of hours, with and without the data center</p></figcaption>
+        <div class="chart-box"><canvas id="c-pdc" role="img" aria-label="Price-duration curve with and without the data center"></canvas></div>
+      </figure>
+      <figure class="card chart-card">
+        <figcaption><h2>Price change by month</h2><p>Bars: selected variant. Whiskers: range across the three variants</p></figcaption>
+        <div class="chart-box"><canvas id="c-month" role="img" aria-label="Monthly price change"></canvas></div>
+        <details class="data-table"><summary>Show data</summary><div id="t-month"></div></details>
+      </figure>
+      <figure class="card chart-card">
+        <figcaption><h2>Price change by hour of day</h2><p>Local time. Shaded: range across the three variants</p></figcaption>
+        <div class="chart-box"><canvas id="c-hour" role="img" aria-label="Price change by hour of day"></canvas></div>
+      </figure>
+      <figure class="card chart-card">
+        <figcaption><h2>Price change by data center size</h2><p>Grows faster than size: more hours exceed spare import capacity</p></figcaption>
+        <div class="chart-box"><canvas id="c-size" role="img" aria-label="Price change by data center size"></canvas></div>
+        <details class="data-table"><summary>Show data</summary><div id="t-size"></div></details>
+      </figure>
+    </div>
+    <p class="fineprint">Price change = modelled change added to actual historical day-ahead prices for the chosen market year.
+      The central variant is the upper end of the likely range: hydro and import response to higher prices are not modelled.
+      Consumer cost = price change × existing Finnish consumption, assuming everyone pays the spot price.</p>
+  </section>
+
+  <!-- 2. Finnish power system -->
+  <section id="tab-system" class="tab-panel" role="tabpanel" aria-label="Finnish power system" hidden>
+    <figure class="card chart-card wide">
+      <figcaption><h2>Monthly electricity supply, 2019–2025</h2><p>Production by source and net imports (GWh per month); line: consumption</p></figcaption>
+      <div class="chart-box tall"><canvas id="c-mix" role="img" aria-label="Monthly production mix and consumption"></canvas></div>
+    </figure>
+    <div class="grid2">
+      <figure class="card chart-card">
+        <figcaption>
+          <h2>Price vs residual load</h2>
+          <p>Hourly sample; residual load = consumption − wind − solar. Grey: all other years</p>
+          <label class="inline-control">Year <select id="scatter-year"></select></label>
+        </figcaption>
+        <div class="chart-box"><canvas id="c-scatter" role="img" aria-label="Price vs residual load"></canvas></div>
+      </figure>
+      <figure class="card chart-card">
+        <figcaption><h2>Price coupling with Sweden</h2><p>Share of hours in each price regime</p></figcaption>
+        <div class="chart-box"><canvas id="c-regime" role="img" aria-label="Coupling regime shares by year"></canvas></div>
+        <details class="data-table"><summary>Show data</summary><div id="t-regime"></div></details>
+      </figure>
+    </div>
+    <p class="fineprint">Coupled: Finnish price equals SE1's, or SE3's when the link to SE1 is full. Import-constrained:
+      Finland pricier and imports near capacity. Other separated: Finland pricier, incl. hours coupled only with Estonia.
+      Export-constrained: Finland cheaper than SE1.</p>
+  </section>
+
+  <!-- 3. Renewables -->
+  <section id="tab-renewables" class="tab-panel" role="tabpanel" aria-label="Renewables" hidden>
+    <div class="grid2">
+      <figure class="card chart-card">
+        <figcaption><h2>Wind output vs wind speed</h2><p>National capacity factor vs mean 100 m wind speed at nine wind-farm areas, 2023–2025 sample</p></figcaption>
+        <div class="chart-box"><canvas id="c-wind" role="img" aria-label="Wind capacity factor vs wind speed with fitted curve"></canvas></div>
+      </figure>
+      <figure class="card chart-card">
+        <figcaption>
+          <h2>Monthly capacity factors</h2>
+          <p>Lines: selected year. Shaded: range over 2019–2025</p>
+          <label class="inline-control">Year <select id="cf-year"></select></label>
+        </figcaption>
+        <div class="chart-box"><canvas id="c-cf" role="img" aria-label="Monthly wind and solar capacity factors"></canvas></div>
+      </figure>
+    </div>
+    <div class="card calc">
+      <h2>Wind output calculator</h2>
+      <p>Expected national wind output for a given wind speed, from the fitted curve (uncurtailed output).</p>
+      <div class="calc-row">
+        <label class="control"><span>Mean wind speed at 100 m: <strong id="ws-label">8.0 m/s</strong></span>
+          <input id="ws" type="range" min="0" max="20" step="0.5" value="8"></label>
+        <label class="control"><span>Installed wind capacity (MW)</span>
+          <input id="cap" type="number" min="0" max="50000" step="100"></label>
+      </div>
+      <div class="calc-out">
+        <div><div class="stat-label">Capacity factor</div><div class="stat-value" id="calc-cf">–</div></div>
+        <div><div class="stat-label">Expected output</div><div class="stat-value" id="calc-mw">–</div></div>
+      </div>
+      <p class="fineprint" id="cap-note"></p>
+    </div>
+  </section>
+
+  <!-- 4. Method -->
+  <section id="tab-method" class="tab-panel prose" role="tabpanel" aria-label="Method and limitations" hidden>
+    <div class="card">
+      <h2>How the estimate is made</h2>
+      <ol>
+        <li><strong>Weather to wind and solar.</strong> Hourly wind speed and sunshine (ERA5 reanalysis) at a few
+          points in Finland's main wind and solar areas are turned into national output, calibrated against Fingrid's
+          production data.</li>
+        <li><strong>Residual load.</strong> Consumption minus wind and solar: the demand that other power plants and
+          imports must cover.</li>
+        <li><strong>Price model.</strong> Fitted on 2023–2025 (the 2022 energy crisis is left out): how the Finnish
+          day-ahead price rises with residual load. Two models are used: a simple supply curve and a gradient-boosting
+          model in which the price can only rise with load.</li>
+        <li><strong>Price coupling.</strong> Finland often has the same price as Sweden. In those hours, extra demand
+          is mostly met by imports and barely moves the price, until the spare import capacity is used up. When prices
+          are separated, the Finnish price curve applies.</li>
+        <li><strong>Scenarios.</strong> The data center's load (and, optionally, a matching wind PPA) is added hour by
+          hour to a historical market year, and the price change is calculated.</li>
+      </ol>
+      <h2>Main assumptions</h2>
+      <ul>
+        <li>The data center's size, load profile and timeline are not public; they are inputs, not facts.</li>
+        <li>In hours with zero or negative prices, extra demand first uses wind power that was being curtailed.</li>
+        <li>Import capacity: Fingrid's official values; after the switch to flow-based market coupling (October 2024),
+          documented fixed values.</li>
+      </ul>
+      <h2>Limitations</h2>
+      <ul>
+        <li>A statistical estimate, not a full market model. Hydro producers and imports would respond to higher
+          prices, which the model holds fixed, so the central estimate is the upper end of the likely range.</li>
+        <li>Above about 500 MW, new investment in generation, storage and transmission would follow; it is not
+          modelled, so large sizes are increasingly an upper bound.</li>
+        <li>The consumer cost assumes everyone pays the spot price. Many consumers have fixed-price contracts.</li>
+        <li>Fingrid's solar series is a forecast-based estimate, and its wind and solar capacity figures are estimates.</li>
+        <li>Finland is one bidding zone; regional grid limits inside Finland are not modelled.</li>
+      </ul>
+      <h2>Data and attribution</h2>
+      <ul>
+        <li>Fingrid Open Data: Source Fingrid / data.fingrid.fi, license CC 4.0 BY.</li>
+        <li>Day-ahead prices and load: ENTSO-E Transparency Platform.</li>
+        <li>Weather: Open-Meteo Historical Weather API (CC BY 4.0), based on ERA5 from the Copernicus Climate Change
+          Service.</li>
+        <li>Charts: Chart.js (MIT). Code: open source, MIT licence.</li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<footer class="wrap site-footer">
+  <p>Statistical estimate for discussion, not a forecast. Sources: Fingrid (CC BY 4.0), ENTSO-E, Open-Meteo / ERA5.</p>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
