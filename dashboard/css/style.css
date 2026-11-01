@@ -123,6 +123,10 @@ figcaption h2, .card h2 { font-size: 1rem; margin: 0; }
 figcaption p { margin: 2px 0 0; font-size: 0.83rem; color: var(--text-secondary); }
 .chart-box { position: relative; height: 290px; margin-top: 10px; }
 .chart-box.tall { height: 360px; }
+.chart-error {
+  position: absolute; inset: 0; margin: 0; display: flex; align-items: center; justify-content: center;
+  text-align: center; padding: 16px; font-size: 0.9rem; color: var(--text-secondary);
+}
 
 .data-table { margin-top: 8px; font-size: 0.85rem; }
 .data-table summary { cursor: pointer; color: var(--text-secondary); }

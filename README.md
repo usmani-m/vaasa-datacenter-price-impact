@@ -70,6 +70,8 @@ python -m src.process.export_dashboard    # compact JSON -> dashboard/data/
 
 To view it locally, run `python -m http.server -d dashboard 8000` and open http://localhost:8000; opening the HTML file directly won't load the data. The site is published to GitHub Pages by `.github/workflows/pages.yml` on pushes to `master`. Before the first deployment, set Settings → Pages → Source to "GitHub Actions". Screenshots of every tab, in light and dark mode and at phone width, are in `outputs/dashboard/`.
 
+Browser tests (`tests/test_dashboard.py`, Playwright) use every control with real input: each dropdown value, the sliders across their full range, the PPA checkbox, the tabs and the theme toggle. After each change they check that every chart has data and was drawn, and that no console errors appeared. They also check that a chart that fails to render leaves the others intact. Run them with `pip install -r requirements-dev.txt` and `pytest tests/test_dashboard.py`; they use the installed Chrome, or Playwright's Chromium (`python -m playwright install chromium`). Set `DASHBOARD_BROWSERS=chromium,firefox,webkit` to test other engines too.
+
 ## Limitations
 
 Finland is modeled as a single bidding zone. Scenario results depend on explicit assumptions for data center size, load factor, ramp-up, and renewable power purchase agreements; this is a statistical estimate, not a full electricity-market model.

@@ -59,6 +59,24 @@
     return charts[id];
   }
 
+  // Draw one chart in isolation: an error is logged and shown in that chart's box only,
+  // so it can never stop the other charts on the page from rendering.
+  function draw(id, fn) {
+    const box = $(id).parentElement;
+    box.querySelectorAll(".chart-error").forEach((el) => el.remove());
+    try {
+      fn();
+    } catch (e) {
+      console.error(`Chart "${id}" failed to render:`, e);
+      if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+      box.insertAdjacentHTML("beforeend", `<p class="chart-error">This chart could not be drawn (${e.message}).</p>`);
+    }
+  }
+  // Same isolation for non-chart pieces (stat cards, tables).
+  function guard(name, fn) {
+    try { fn(); } catch (e) { console.error(`"${name}" failed to render:`, e); }
+  }
+
   function axis(title, extra = {}) {
     return Object.assign({ title: { display: !!title, text: title }, grid: { color: palette().grid } }, extra);
   }
@@ -148,6 +166,22 @@
     if (tab === "system") renderSystem();
     if (tab === "renewables") renderRenewables();
   }
+  function renderImpact() {
+    guard("impact cards", impactCards);
+    draw("c-pdc", impactPdc);
+    draw("c-month", impactMonth);
+    draw("c-hour", impactHour);
+    draw("c-size", impactSize);
+  }
+  function renderSystem() {
+    draw("c-mix", systemMix);
+    draw("c-scatter", systemScatter);
+    draw("c-regime", systemRegime);
+  }
+  function renderRenewables() {
+    draw("c-wind", renewablesWind);
+    draw("c-cf", renewablesCf);
+  }
 
   // ------------------------------------------------------------ 1. impact
   function runFor(variant) {
@@ -158,8 +192,9 @@
     const imp = DATA.impact;
     // optional shareable state: ?size=800&year=2025&ppa=1&variant=binned
     const q = new URLSearchParams(location.search);
-    if (imp.sizes.includes(Number(q.get("size")))) state.size = Number(q.get("size"));
-    if (imp.years.includes(Number(q.get("year")))) state.year = Number(q.get("year"));
+    // q.has(): Number(null) is 0, a valid size, so a missing parameter must not be read as one
+    if (q.has("size") && imp.sizes.includes(Number(q.get("size")))) state.size = Number(q.get("size"));
+    if (q.has("year") && imp.years.includes(Number(q.get("year")))) state.year = Number(q.get("year"));
     if (VARIANTS.includes(q.get("variant"))) state.variant = q.get("variant");
     if (q.get("ppa") === "1") state.ppa = true;
     $("size").value = state.size; $("variant").value = state.variant; $("ppa").checked = state.ppa;
@@ -178,13 +213,17 @@
     ["size", "year", "variant", "ppa"].forEach((id) => $(id).addEventListener("input", on));
   }
 
-  function renderImpact() {
+  // what every impact chart needs for the current selection
+  function impactCtx() {
     const imp = DATA.impact;
-    const p = palette();
-    const i = imp.sizes.indexOf(state.size);
-    const run = runFor(state.variant);
-    const all = VARIANTS.map(runFor);
-    const base = imp.baseline[String(state.year)];
+    return {
+      imp, p: palette(), i: imp.sizes.indexOf(state.size), run: runFor(state.variant),
+      all: VARIANTS.map(runFor), base: imp.baseline[String(state.year)],
+    };
+  }
+
+  function impactCards() {
+    const { imp, i, run, all, base } = impactCtx();
     $("size-label").textContent = `${state.size} MW`;
     $("upper-note").hidden = state.size <= imp.upper_bound_note_mw;
 
@@ -200,8 +239,10 @@
     $("stat-ppa-sub").textContent = state.ppa
       ? "New wind sized to the data center's annual energy"
       : `PPA off · cost range €${int(Math.min(...costs))}–${int(Math.max(...costs))} million`;
+  }
 
-    // price-duration curve
+  function impactPdc() {
+    const { imp, p, i, run, base } = impactCtx();
     makeChart("c-pdc", {
       type: "line",
       data: {
@@ -220,8 +261,11 @@
         plugins: { tooltip: { callbacks: { title: (it) => `${it[0].label}% of hours`, label: (c) => `${c.dataset.label}: ${fmt(c.parsed.y, 1)} €/MWh` } } },
       },
     });
+  }
 
-    // monthly bars + whiskers
+  // monthly bars + whiskers
+  function impactMonth() {
+    const { p, i, run, all } = impactCtx();
     const mRanges = MONTHS.map((_, m) => [Math.min(...all.map((r) => r.monthly[i][m])), Math.max(...all.map((r) => r.monthly[i][m]))]);
     makeChart("c-month", {
       type: "bar",
@@ -237,8 +281,10 @@
     });
     table("t-month", ["Month", `${state.variant}`, "Low", "High"],
       MONTHS.map((m, k) => [m, signed(run.monthly[i][k], 2), signed(mRanges[k][0], 2), signed(mRanges[k][1], 2)]));
+  }
 
-    // hour of day
+  function impactHour() {
+    const { p, i, run, all } = impactCtx();
     const hours = [...Array(24).keys()];
     const hLo = hours.map((h) => Math.min(...all.map((r) => r.hour[i][h])));
     const hHi = hours.map((h) => Math.max(...all.map((r) => r.hour[i][h])));
@@ -257,8 +303,10 @@
         plugins: { legend: hideBandLegend, tooltip: { filter: (it) => !it.dataset.isBand, callbacks: { label: (c) => `${c.dataset.label}: ${signed(c.parsed.y, 2)} €/MWh` } } },
       },
     });
+  }
 
-    // size curve
+  function impactSize() {
+    const { imp, p, run, all } = impactCtx();
     const sLo = imp.sizes.map((_, k) => Math.min(...all.map((r) => r.mean[k])));
     const sHi = imp.sizes.map((_, k) => Math.max(...all.map((r) => r.mean[k])));
     makeChart("c-size", {
@@ -287,13 +335,13 @@
     const years = Object.keys(DATA.history.scatter_rl_gw_price);
     $("scatter-year").innerHTML = years.map((y) => `<option value="${y}">${y}${y === "2022" ? " (energy crisis)" : ""}</option>`).join("");
     $("scatter-year").value = String(state.scatterYear);
-    $("scatter-year").addEventListener("input", () => { state.scatterYear = Number($("scatter-year").value); renderSystem(); });
+    // the year only affects the scatter: redraw that chart alone
+    $("scatter-year").addEventListener("input", () => { state.scatterYear = Number($("scatter-year").value); draw("c-scatter", systemScatter); });
   }
 
-  function renderSystem() {
+  function systemMix() {
     const h = DATA.history;
     const p = palette();
-    // monthly mix
     const mixSets = h.mix_order.map((k, j) => ({
       type: "bar", label: MIX_LABELS[k], data: h.mix_gwh[k], backgroundColor: p.s[j], stack: "supply", order: 2,
       borderWidth: 0, barPercentage: 1, categoryPercentage: 0.9,
@@ -312,9 +360,14 @@
         plugins: { tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${fmt(c.parsed.y, 0)} GWh` } } },
       },
     });
+  }
 
-    // price vs residual load
+  // price vs residual load
+  function systemScatter() {
+    const h = DATA.history;
+    const p = palette();
     const y = String(state.scatterYear);
+    if (!h.scatter_rl_gw_price[y] || !h.median_by_rl[y]) throw new Error(`no scatter data for ${y}`);
     const others = Object.entries(h.scatter_rl_gw_price).filter(([k]) => k !== y).flatMap(([, v]) => v);
     const hl = y === "2022" ? p.s[1] : p.s[0];
     makeChart("c-scatter", {
@@ -331,8 +384,11 @@
         plugins: { tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${fmt(c.parsed.x, 1)} GW, ${fmt(c.parsed.y, 0)} €/MWh` } } },
       },
     });
+  }
 
-    // regime shares
+  function systemRegime() {
+    const h = DATA.history;
+    const p = palette();
     const ry = Object.keys(h.regime_share_pct);
     makeChart("c-regime", {
       type: "bar",
@@ -359,7 +415,7 @@
     const years = Object.keys(r.monthly_cf);
     $("cf-year").innerHTML = years.map((y) => `<option value="${y}">${y}</option>`).join("");
     $("cf-year").value = String(state.cfYear);
-    $("cf-year").addEventListener("input", () => { state.cfYear = Number($("cf-year").value); renderRenewables(); });
+    $("cf-year").addEventListener("input", () => { state.cfYear = Number($("cf-year").value); draw("c-cf", renewablesCf); });
     $("cap").value = r.calculator.default_capacity_mw;
     $("cap-note").textContent = `Default capacity: ${r.calculator.capacity_note}. Curve fitted on ${r.wind_curve.fit_years[0]}–${r.wind_curve.fit_years[r.wind_curve.fit_years.length - 1]} hours with positive prices (no curtailment).`;
     ["ws", "cap"].forEach((id) => $(id).addEventListener("input", updateCalc));
@@ -376,7 +432,7 @@
     $("calc-mw").textContent = `${Math.round(cf * cap).toLocaleString("en-US")} MW`;
   }
 
-  function renderRenewables() {
+  function renewablesWind() {
     const r = DATA.renewables;
     const p = palette();
     makeChart("c-wind", {
@@ -392,7 +448,11 @@
         plugins: { tooltip: { callbacks: { label: (c) => `${fmt(c.parsed.x, 1)} m/s → ${(c.parsed.y * 100).toFixed(0)}%` } } },
       },
     });
+  }
 
+  function renewablesCf() {
+    const r = DATA.renewables;
+    const p = palette();
     const years = Object.keys(r.monthly_cf);
     const y = String(state.cfYear);
     const rangeOf = (key) => [
