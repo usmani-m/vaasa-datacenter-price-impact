@@ -3,6 +3,19 @@
 # FI is "coupled" with SE1 when |FI price - SE1 price| <= this (EUR/MWh).
 price_tolerance_eur: 0.5
 
+# Flow-based period (Nordic flow-based market coupling from delivery day 2024-10-30 CET): FI also
+# counts as coupled with SE1 / SE3 when the spread is <= tolerance_eur AND that border has at least
+# min_spare_mw of spare import capacity. Why: under NTC (2023-01 .. 2024-10-29) coupled zones had
+# exactly equal prices (FI = SE1 to the cent in 63% of hours; spreads 0.01-2 EUR/MWh in ~2%), while
+# under flow-based exact equality fell to 9% and spreads 0.01-2 EUR/MWh rose to ~40% of hours.
+# Flow-based coupling leaves small spreads between zones that are not really congested.
+# min_spare_mw = 300: the extra load being tested would still fit through the border.
+flow_based_rule:
+  enabled: true
+  from: 2024-10-29T23:00Z  # = 2024-10-30 00:00 CET (UTC+1), first flow-based delivery day
+  tolerance_eur: 2.0
+  min_spare_mw: 300
+
 # Imports count as "near capacity" when imports from SE1 + SE3 >= this share of their capacity.
 near_capacity_share: 0.9
 

@@ -1,4 +1,4 @@
-"""Fetch day-ahead prices (FI and neighbouring zones) from the ENTSO-E Transparency Platform.
+"""Fetch day-ahead prices and actual load (FI and neighbouring zones) from ENTSO-E Transparency.
 
 Data: ENTSO-E Transparency Platform (transparency.entsoe.eu).
 
@@ -10,6 +10,7 @@ Data: ENTSO-E Transparency Platform (transparency.entsoe.eu).
 
 Usage:
     python -m src.fetch.entsoe --start 2019-01-01 --end 2026-01-01 --areas FI SE1 SE3 EE
+    python -m src.fetch.entsoe --start 2023-01-01 --end 2026-01-01 --areas FI SE1 SE3 --kind load
 """
 
 from __future__ import annotations
@@ -27,6 +28,8 @@ from entsoe import EntsoePandasClient
 from entsoe.exceptions import NoMatchingDataError
 
 AREAS = {"FI": "FI", "SE1": "SE_1", "SE3": "SE_3", "EE": "EE"}  # label -> entsoe-py area code
+# kind -> (raw cache suffix, value column, hourly file prefix)
+KINDS = {"price": ("day_ahead", "price_eur_mwh", "price"), "load": ("load", "load_mw", "load")}
 MIN_INTERVAL_S = 2.0
 MAX_RETRIES = 5
 
@@ -53,12 +56,16 @@ class EntsoeFetcher:
             time.sleep(MIN_INTERVAL_S - elapsed)
         self._last_request = time.monotonic()
 
-    def day_ahead(self, start: pd.Timestamp, end: pd.Timestamp, area: str = "FI") -> pd.Series:
-        """Prices with start <= timestamp < end at native resolution, UTC index."""
+    def query(self, start: pd.Timestamp, end: pd.Timestamp, area: str = "FI", kind: str = "price") -> pd.Series:
+        """Day-ahead prices (kind="price") or actual total load (kind="load") with
+        start <= timestamp < end at native resolution, UTC index."""
         for attempt in range(1, MAX_RETRIES + 1):
             self._wait()
             try:
-                s = self.client.query_day_ahead_prices(AREAS[area], start=start, end=end)
+                if kind == "price":
+                    s = self.client.query_day_ahead_prices(AREAS[area], start=start, end=end)
+                else:
+                    s = self.client.query_load(AREAS[area], start=start, end=end).iloc[:, 0]
             except NoMatchingDataError:
                 log.warning("No data for %s .. %s", start, end)
                 return pd.Series(dtype=float, index=pd.DatetimeIndex([], tz="UTC"))
@@ -81,15 +88,16 @@ class EntsoeFetcher:
         raise RuntimeError(f"ENTSO-E request failed after {MAX_RETRIES} attempts: {start} .. {end}")
 
 
-def raw_dir(area: str = "FI") -> Path:
-    return RAW_ROOT / f"{area}_day_ahead"
+def raw_dir(area: str = "FI", kind: str = "price") -> Path:
+    return RAW_ROOT / f"{area}_{KINDS[kind][0]}"
 
 
 def fetch_prices(start: str | pd.Timestamp, end: str | pd.Timestamp, refresh: bool = False,
-                 area: str = "FI") -> pd.Series:
+                 area: str = "FI", kind: str = "price") -> pd.Series:
     """[start, end) at native resolution; one cached Parquet file per completed month."""
     start, end = _utc(start), _utc(end)
-    cache = raw_dir(area)
+    cache = raw_dir(area, kind)
+    col = KINDS[kind][1]
     cache.mkdir(parents=True, exist_ok=True)
     now = pd.Timestamp.now(tz="UTC")
     fetcher = None
@@ -98,14 +106,24 @@ def fetch_prices(start: str | pd.Timestamp, end: str | pd.Timestamp, refresh: bo
         m_end = m_start + pd.offsets.MonthBegin(1)
         path = cache / f"{m_start:%Y-%m}.parquet"
         if path.exists() and not refresh:
-            s = pd.read_parquet(path)["price_eur_mwh"]
+            s = pd.read_parquet(path)[col]
         else:
             fetcher = fetcher or EntsoeFetcher()
-            log.info("Fetching %s day-ahead prices for %s", area, f"{m_start:%Y-%m}")
-            s = fetcher.day_ahead(m_start, min(m_end, now), area)
+            log.info("Fetching %s %s for %s", area, kind, f"{m_start:%Y-%m}")
+            try:
+                s = fetcher.query(m_start, min(m_end, now), area, kind)
+            except requests.HTTPError as e:
+                if e.response is None or e.response.status_code != 400:
+                    raise
+                # ENTSO-E sometimes rejects a month that it serves fine in smaller pieces
+                # (e.g. SE1 load 2025-05): fall back to weekly requests for this month
+                log.warning("HTTP 400 for %s %s %s; retrying in weekly chunks", area, kind, f"{m_start:%Y-%m}")
+                edges = list(pd.date_range(m_start, min(m_end, now), freq="7D")) + [min(m_end, now)]
+                s = pd.concat([fetcher.query(a, b, area, kind) for a, b in zip(edges[:-1], edges[1:]) if a < b])
+                s = s[~s.index.duplicated(keep="last")].sort_index()
             # day-ahead prices for tomorrow exist, so a month is complete once it has ended
             if m_end <= now:
-                s.rename("price_eur_mwh").to_frame().to_parquet(path)
+                s.rename(col).to_frame().to_parquet(path)
         parts.append(s)
     out = pd.concat(parts) if parts else pd.Series(dtype=float)
     out.index.name = "start_time"
@@ -126,8 +144,8 @@ def to_hourly(s: pd.Series, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFr
     return hourly
 
 
-def hourly_path(start: str | pd.Timestamp, end: str | pd.Timestamp, area: str = "FI") -> Path:
-    return HOURLY_DIR / f"price_{area.lower()}_{_utc(start):%Y%m%d}_{_utc(end):%Y%m%d}.parquet"
+def hourly_path(start: str | pd.Timestamp, end: str | pd.Timestamp, area: str = "FI", kind: str = "price") -> Path:
+    return HOURLY_DIR / f"{KINDS[kind][2]}_{area.lower()}_{_utc(start):%Y%m%d}_{_utc(end):%Y%m%d}.parquet"
 
 
 def _utc(t: str | pd.Timestamp) -> pd.Timestamp:
@@ -140,6 +158,7 @@ def main() -> None:
     p.add_argument("--start", required=True, help="UTC start (inclusive), e.g. 2019-01-01")
     p.add_argument("--end", required=True, help="UTC end (exclusive), e.g. 2026-01-01")
     p.add_argument("--areas", nargs="+", default=["FI"], choices=list(AREAS), help="bidding zones, e.g. FI SE1 SE3 EE")
+    p.add_argument("--kind", default="price", choices=list(KINDS), help="price (day-ahead) or load (actual total load)")
     p.add_argument("--refresh", action="store_true", help="ignore cached months")
     args = p.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -147,12 +166,12 @@ def main() -> None:
     start, end = _utc(args.start), _utc(args.end)
     HOURLY_DIR.mkdir(parents=True, exist_ok=True)
     for area in args.areas:
-        raw = fetch_prices(start, end, refresh=args.refresh, area=area)
+        raw = fetch_prices(start, end, refresh=args.refresh, area=area, kind=args.kind)
         # one hourly file per calendar year, matching the other hourly series
         for year in range(start.year, (end - pd.Timedelta("1h")).year + 1):
             ys, ye = max(start, _utc(f"{year}-01-01")), min(end, _utc(f"{year + 1}-01-01"))
             hourly = to_hourly(raw[(raw.index >= ys) & (raw.index < ye)], ys, ye)
-            path = hourly_path(ys, ye, area)
+            path = hourly_path(ys, ye, area, args.kind)
             hourly.to_parquet(path)
             log.info("Wrote %d hourly rows to %s (%d missing, %d incomplete)", len(hourly), path,
                      int(hourly["value"].isna().sum()), int((~hourly["complete"]).sum()))

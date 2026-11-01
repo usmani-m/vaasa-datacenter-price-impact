@@ -35,6 +35,7 @@ Finnish load does. This module:
 
 Usage:
     python -m src.models.coupling
+    python -m src.models.coupling --check-thresholds 0.5 2 5
 """
 
 from __future__ import annotations
@@ -81,34 +82,51 @@ def add_capacity(t: pd.DataFrame, cfg: dict) -> pd.DataFrame:
     return t
 
 
+def spare(t: pd.DataFrame, nb: str) -> pd.Series:
+    """Spare import capacity on the border with nb (MW, >= 0; 0 where capacity is unknown)."""
+    return (t[f"cap_imp_{nb}"] - t[f"imp_{nb}"]).clip(lower=0).fillna(0)
+
+
+def coupled_with(t: pd.DataFrame, cfg: dict, nb: str) -> pd.Series:
+    """FI price coupled with nb's.
+
+    Always: |FI - nb| <= price_tolerance_eur. In the flow-based period, if configured
+    (flow_based_rule), also: |FI - nb| <= its tolerance_eur AND spare import capacity on that
+    border >= its min_spare_mw (flow-based coupling leaves small spreads between coupled zones).
+    """
+    spread = (t["price_eur_mwh"] - t[f"price_{nb}"]).abs()
+    out = spread <= cfg["price_tolerance_eur"]
+    fb = cfg.get("flow_based_rule")
+    if fb and fb.get("enabled"):
+        period = t.index >= pd.Timestamp(fb["from"])
+        out |= period & (spread <= fb["tolerance_eur"]) & (spare(t, nb) >= fb["min_spare_mw"])
+    return out
+
+
 def classify(t: pd.DataFrame, cfg: dict) -> pd.Series:
     """coupled (with SE1), coupled_se3 (with SE3 but not SE1), import_constrained,
     separated_other, export_constrained, unknown. See the module doc."""
-    tol, near = cfg["price_tolerance_eur"], cfg["near_capacity_share"]
+    near = cfg["near_capacity_share"]
     d1 = t["price_eur_mwh"] - t["price_se1"]
+    c1, c3 = coupled_with(t, cfg, "se1"), coupled_with(t, cfg, "se3")
     d3 = t["price_eur_mwh"] - t["price_se3"]
-    cap_sw = t["cap_imp_se1"] + t["cap_imp_se3"]
-    imp_sw = t["imp_se1"] + t["imp_se3"]
-    near_cap = imp_sw >= near * cap_sw
+    near_cap = (t["imp_se1"] + t["imp_se3"]) >= near * (t["cap_imp_se1"] + t["cap_imp_se3"])
     r = pd.Series("unknown", index=t.index)
-    above = d1 > tol
+    above, below = (d1 > 0) & ~c1, (d1 < 0) & ~c1
     r[above] = "separated_other"  # incl. FI between SE1 and SE3 with imports near capacity
-    r[above & (d3 > -tol) & near_cap] = "import_constrained"
-    r[above & (d3.abs() <= tol)] = "coupled_se3"  # SE1 link congested, SE3 link not
-    r[d1.abs() <= tol] = "coupled"
-    r[d1 < -tol] = "export_constrained"
+    r[above & ((d3 > 0) | c3) & near_cap] = "import_constrained"
+    r[above & c3] = "coupled_se3"  # SE1 link congested, SE3 link not
+    r[c1] = "coupled"
+    r[below] = "export_constrained"
     r[d1.isna()] = "unknown"
     return r
 
 
 def headroom(t: pd.DataFrame, cfg: dict) -> pd.Series:
-    """Spare import capacity (MW) on borders whose price is within tolerance of FI's."""
-    tol = cfg["price_tolerance_eur"]
+    """Spare import capacity (MW) on borders whose price is coupled with FI's."""
     h = pd.Series(0.0, index=t.index)
     for nb in NEIGHBOURS:
-        same = (t["price_eur_mwh"] - t[f"price_{nb}"]).abs() <= tol
-        spare = (t[f"cap_imp_{nb}"] - t[f"imp_{nb}"]).clip(lower=0).fillna(0)
-        h += spare.where(same, 0.0)
+        h += spare(t, nb).where(coupled_with(t, cfg, nb), 0.0)
     return h
 
 
@@ -164,28 +182,131 @@ def coupling_aware(d: pd.DataFrame, regime: pd.Series, head: pd.Series, coupled_
     return pd.DataFrame({"delta": out, "covered_by_imports": cov})
 
 
-# ---------------------------------------------------------------- report
+VARIANTS = {  # name: (model for the imported part in coupled hours, Finnish-curve model family)
+    "binned": ("binned", "binned"),
+    "gbm": ("gbm", "gbm"),  # central
+    "structural": ("structural", "gbm"),  # imported part: FI load share x Finnish curve (low end)
+}
+CENTRAL = "gbm"
 
-def run(years: list[int], preview_year: int, mw: float) -> None:
-    pd.set_option("display.width", 200, "display.max_columns", 40)
-    cfg = load_cfg()
-    tag = f"{years[0]}_{years[-1]}"
+
+def estimate(d: pd.DataFrame, models: dict, mw: float, variants: dict = VARIANTS) -> tuple[pd.DataFrame, pd.Series]:
+    """Per-hour price change for +mw: coupling-aware variants ("new ...") and full-sample ("old ...")."""
+    est, covered = {}, None
+    for name, (cm, fm) in variants.items():
+        coupled_model = (ScaledDelta(models["import_constrained"][fm], d["fi_load_share"]) if cm == "structural"
+                         else models["coupled"][cm])
+        res = coupling_aware(d, d["regime"], d["headroom"], coupled_model, models["import_constrained"][fm],
+                             models["export_constrained"][fm], models["full"][fm], mw)
+        est[f"new {name}"] = res["delta"]
+        covered = res["covered_by_imports"]
+    for k, m in models["full"].items():
+        est[f"old {k}"] = pd.Series(delta(m, d, mw), index=d.index)
+    return pd.DataFrame(est), covered
+
+
+def prepare(years: list[int], cfg: dict) -> pd.DataFrame:
     t = add_capacity(P.load(years), cfg)
     t["regime"] = classify(t, cfg)
     t["headroom"] = headroom(t, cfg)
+    try:
+        t["fi_load_share"] = load_share(years, t.index)
+    except FileNotFoundError:  # ENTSO-E load not fetched for some year: structural variant unavailable
+        t["fi_load_share"] = np.nan
+    return t
+
+
+class ScaledDelta:
+    """Price change = share * (change on base model): the coupled-area version of the Finnish curve."""
+
+    def __init__(self, base, share: pd.Series):
+        self.base, self.share = base, share
+
+    def predict(self, d: pd.DataFrame, extra_mw=0.0) -> np.ndarray:
+        p0 = self.base.predict(d)
+        if np.all(np.asarray(extra_mw) == 0):
+            return p0
+        return p0 + self.share.reindex(d.index).to_numpy() * (self.base.predict(d, extra_mw) - p0)
+
+
+def load_share(years: list[int], index: pd.DatetimeIndex) -> pd.Series:
+    """Finland's share of FI + SE1 + SE3 actual load (ENTSO-E), per hour."""
+    from src.fetch import entsoe as E
+    load = {}
+    for a in ("FI", "SE1", "SE3"):
+        parts = [pd.read_parquet(E.hourly_path(f"{y}-01-01", f"{y + 1}-01-01", a, "load"))["value"] for y in years]
+        load[a] = pd.concat(parts).reindex(index)
+    return load["FI"] / (load["FI"] + load["SE1"] + load["SE3"])
+
+
+def structural_check(fit_years: list[int], years: list[int]) -> tuple[pd.DataFrame, pd.Series]:
+    """Compare the coupled-hour slope with FI load share x Finnish (import-constrained) slope."""
+    cfg = load_cfg()
+    t = prepare(sorted(set(fit_years) | set(years)), cfg)
+    t["fi_load_share"] = load_share(sorted(set(fit_years) | set(years)), t.index)
+    fit = t[t["year"].isin(fit_years)]
+    mask = P.fit_mask(fit)
+    models = fit_regime_models(fit, mask, fit["regime"])
+    rows = {}
+    c = mask & fit["regime"].isin(COUPLED) & fit["fi_load_share"].notna()
+    ic = fit[mask & (fit["regime"] == "import_constrained")]
+    # (a) the import-constrained slope as measured in import-constrained hours (regime average)
+    ic_avg = {fam: float(delta(models["import_constrained"][fam], ic, P.SLOPE_MW).mean()) for fam in ("binned", "gbm")}
+    for label, sel in [("all fit years", c)] + [(y, c & (fit["year"] == y)) for y in fit_years]:
+        d = fit[sel]
+        r = {"coupled hours": int(sel.sum()), "FI load share": float(d["fi_load_share"].mean())}
+        for fam in ("binned", "gbm"):
+            r[f"{fam}: coupled-hour slope"] = float(delta(models["coupled"][fam], d, P.SLOPE_MW).mean())
+            r[f"{fam}: share x import-constr. slope"] = float(d["fi_load_share"].mean() * ic_avg[fam])
+            # (b) the Finnish curve's slope at the coupled hour's own conditions (extrapolates the
+            # import-constrained model to lower loads)
+            fin = delta(models["import_constrained"][fam], d, P.SLOPE_MW)
+            r[f"{fam}: share x Finnish curve at the hour"] = float((d["fi_load_share"].to_numpy() * fin).mean())
+        rows[label] = r
+    print("import-constrained slope (regime average, per +100 MW):", {k: round(v, 3) for k, v in ic_avg.items()})
+    return pd.DataFrame(rows).T, t["fi_load_share"]
+
+
+def threshold_check(fit_years: list[int], preview_years: list[int], tolerances: list[float], mw: float) -> pd.DataFrame:
+    """Regime shares and the +mw estimate for each plain coupling threshold (no flow-based rule)."""
+    rows = {}
+    for tol in tolerances:
+        cfg = load_cfg()
+        cfg["price_tolerance_eur"] = tol
+        cfg["flow_based_rule"] = {"enabled": False}
+        t = prepare(sorted(set(fit_years) | set(preview_years)), cfg)
+        fit = t[t["year"].isin(fit_years)]
+        models = fit_regime_models(fit, P.fit_mask(fit), fit["regime"])
+        for y in preview_years:
+            d = t[(t["year"] == y) & t[P.FEATURES].notna().all(axis=1)]
+            est, _ = estimate(d, models, mw)
+            c = d["regime"].isin(COUPLED)
+            share = d["regime"].value_counts(normalize=True) * 100
+            rows[(tol, y)] = {**{f"% {r}": share.get(r, 0.0) for r in REGIMES[:-1]},
+                              "coupled h switching": int((c & (d["headroom"] < mw)).sum()),
+                              **est.mean().to_dict()}
+    return pd.DataFrame(rows).T.rename_axis(["tolerance", "year"])
+
+
+# ---------------------------------------------------------------- report
+
+def run(years: list[int], preview_years: list[int], mw: float) -> None:
+    pd.set_option("display.width", 200, "display.max_columns", 40)
+    cfg = load_cfg()
+    tag = f"{years[0]}_{years[-1]}"
+    t = prepare(years, cfg)
 
     # --- regime shares (all hours of all built years, for context)
-    all_years = sorted({*years, preview_year, *cfg.get("report_years", [])})
-    ta = add_capacity(P.load(all_years), cfg)
-    ta["regime"] = classify(ta, cfg)
+    all_years = sorted({*years, *preview_years, *cfg.get("report_years", [])})
+    ta = prepare(all_years, cfg)
     share = pd.crosstab(ta["year"], ta["regime"], normalize="index").reindex(columns=REGIMES, fill_value=0) * 100
     print("\n=== Regime share per year (% of hours) ===")
     print(share.round(1).to_string())
     src = {nb: ta.groupby("year")[f"cap_source_{nb}"].agg(lambda s: dict(s.value_counts())) for nb in NEIGHBOURS}
     print("\nImport capacity source (hours): ", {nb: v.to_dict() for nb, v in src.items()})
     ic = ta["regime"] == "import_constrained"
-    sep = (ta["price_eur_mwh"] - ta["price_se1"]) > cfg["price_tolerance_eur"]
-    print(f"FI above SE1 (> tol): {int(sep.sum())} h, of which imports near capacity: {int(ic.sum())} h "
+    sep = ta["regime"].isin(["import_constrained", "separated_other", "coupled_se3"])
+    print(f"FI above SE1 (not coupled): {int(sep.sum())} h, of which imports near capacity: {int(ic.sum())} h "
           f"({ic.sum() / max(sep.sum(), 1) * 100:.0f}%)")
     over = {nb: int((ta[f"imp_{nb}"] > ta[f"cap_imp_{nb}"] + 50).sum()) for nb in NEIGHBOURS}
     print("hours with measured import > capacity + 50 MW:", over)
@@ -217,81 +338,67 @@ def run(years: list[int], preview_year: int, mw: float) -> None:
     slope_tab = pd.DataFrame(rows).T
     print(slope_tab.round(3).to_string())
 
-    # --- +mw preview
-    d = t[(t["year"] == preview_year) & t[P.FEATURES].notna().all(axis=1)].copy()
-    reg, head = d["regime"], d["headroom"]
-    variants = {
-        "binned": ("binned", "binned"),
-        "gbm": ("gbm", "gbm"),
-        "gbm_se1": ("gbm_se1", "gbm"),
-    }
-    est = {}
-    for name, (cm, fm) in variants.items():
-        res = coupling_aware(d, reg, head, models["coupled"][cm], models["import_constrained"][fm],
-                             models["export_constrained"][fm], models["full"][fm], mw)
-        est[f"new {name}"] = res["delta"]
-        covered = res["covered_by_imports"]
-    for k, m in models["full"].items():
-        est[f"old {k}"] = pd.Series(delta(m, d, mw), index=d.index)
-    est = pd.DataFrame(est)
-    new_cols = [c for c in est if c.startswith("new")]
+    # --- structural check on the coupled slope
+    struct, _ = structural_check(years, years)
+    print(f"\n=== Structural check: slope per +{P.SLOPE_MW:.0f} MW in coupled hours (EUR/MWh) ===")
+    print(struct.round(3).to_string())
 
-    c = reg.isin(COUPLED)
-    switched = c & (head < mw)
-    print(f"\n=== +{mw:.0f} MW in every hour of {preview_year} ===")
-    print(f"regimes: {reg.value_counts().to_dict()}")
-    print(f"coupled hours: {int(c.sum())}; spare import capacity >= {mw:.0f} MW in {int((c & (head >= mw)).sum())}, "
-          f"switch to constrained (headroom < {mw:.0f} MW): {int(switched.sum())} "
-          f"({switched.sum() / max(c.sum(), 1) * 100:.1f}% of coupled hours); "
-          f"mean share of the {mw:.0f} MW met by imports in coupled hours: {covered[c].mean() / mw * 100:.0f}%")
-    c1 = reg == "coupled"
-    print(f"  of which coupled with SE1 (original definition): {int(c1.sum())} h, switching {int((c1 & (head < mw)).sum())}; "
-          f"coupled with SE3 only: {int((reg == 'coupled_se3').sum())} h, switching "
-          f"{int(((reg == 'coupled_se3') & (head < mw)).sum())}")
-    print(f"coupled-hour headroom (MW): median {head[c].median():.0f}, p10 {head[c].quantile(0.1):.0f}, "
-          f"p90 {head[c].quantile(0.9):.0f}")
-    summary = est.mean()
-    print("\nMean price change (EUR/MWh):")
-    print(summary.round(2).to_string())
-    actual = d["price_eur_mwh"].mean()
-    old_ub = float(summary[["old binned", "old gbm"]].max())
-    central = float(summary["new gbm"])
-    lo, hi = float(summary[new_cols].min()), float(summary[new_cols].max())
-    print(f"\nThree numbers for {preview_year} (actual mean price {actual:.2f} EUR/MWh):")
-    print(f"  old upper bound (full-sample models, max of binned/GBM): +{old_ub:.2f} EUR/MWh")
-    print(f"  new coupling-aware estimate (GBM, coupled-hour slope for imported part): +{central:.2f} EUR/MWh")
-    print(f"  range between coupling-aware models: +{lo:.2f} to +{hi:.2f} EUR/MWh")
-    by_reg = est.groupby(reg).mean()[["old gbm", "old binned", *new_cols]]
-    print("\nBy regime:")
-    print(by_reg.round(2).to_string())
+    # --- +mw estimate per preview year
+    results, compare = {}, {}
+    for y in preview_years:
+        d = t[(t["year"] == y) & t[P.FEATURES].notna().all(axis=1)].copy()
+        if d.empty:
+            continue
+        reg, head = d["regime"], d["headroom"]
+        est, covered = estimate(d, models, mw)
+        new_cols = [c for c in est if c.startswith("new")]
+        c = reg.isin(COUPLED)
+        switched = c & (head < mw)
+        summary = est.mean()
+        old_ub = float(summary[["old binned", "old gbm"]].max())
+        central = float(summary[f"new {CENTRAL}"])
+        lo, hi = float(summary[new_cols].min()), float(summary[new_cols].max())
+        compare[y] = {"actual mean price": float(d["price_eur_mwh"].mean()), "old upper bound": old_ub,
+                      "central": central, "range low": lo, "range high": hi,
+                      "% coupled (incl. SE3-only)": float(c.mean() * 100),
+                      "coupled h switching": int(switched.sum()),
+                      "share of +MW met by imports in coupled h %": float(covered[c].mean() / mw * 100),
+                      "median headroom in coupled h (MW)": float(head[c].median()),
+                      "mean SE1+SE3+EE import cap (MW)": float((d["cap_imp_se1"].fillna(0) + d["cap_imp_se3"].fillna(0)
+                                                               + d["cap_imp_ee"].fillna(0)).mean()),
+                      **{f"mean {k}": float(v) for k, v in summary.items()}}
+        month, hour = d["month_local"], d["hour_local"]
+        cols = ["old binned", "old gbm", *new_cols]
+        by_month, by_hour = est.groupby(month)[cols].mean(), est.groupby(hour)[cols].mean()
+        for df, key in ((by_month, month), (by_hour, hour)):  # range = min/max of the variant means
+            df["new min"], df["new max"] = df[new_cols].min(axis=1), df[new_cols].max(axis=1)
+            df["coupled %"] = c.groupby(key).mean() * 100
+        results[y] = {"by_month": by_month, "by_hour": by_hour, "by_regime": est.groupby(reg).mean()}
+        print(f"\n=== +{mw:.0f} MW in every hour of {y}: central (GBM) +{central:.2f} EUR/MWh, "
+              f"range +{lo:.2f} to +{hi:.2f}, old upper bound +{old_ub:.2f} ===")
+        print(f"coupled hours {int(c.sum())} ({c.mean() * 100:.0f}%), switching {int(switched.sum())}; "
+              f"regimes {reg.value_counts().to_dict()}")
+        print("By regime:\n" + results[y]["by_regime"].round(2).to_string())
+        print("By month:\n" + by_month.round(2).T.to_string())
+        print("By hour of day (local):\n" + by_hour.round(2).T.to_string())
+        print(f"Wrote {plot(by_month, by_hour, y, mw, tag)}")
 
-    month = d["month_local"]
-    hour = d["hour_local"]
-    cols = ["old binned", "old gbm", *new_cols]
-    by_month, by_hour = est.groupby(month)[cols].mean(), est.groupby(hour)[cols].mean()
-    for df in (by_month, by_hour):  # range between models = min/max of the variant means
-        df["new min"], df["new max"] = df[new_cols].min(axis=1), df[new_cols].max(axis=1)
-    by_month["coupled %"] = c.groupby(month).mean() * 100
-    by_hour["coupled %"] = c.groupby(hour).mean() * 100
-    print("\nBy month (EUR/MWh):")
-    print(by_month.round(2).T.to_string())
-    print("\nBy hour of day, local (EUR/MWh):")
-    print(by_hour.round(2).T.to_string())
+    comp = pd.DataFrame(compare).T
+    print(f"\n=== Year comparison: +{mw:.0f} MW flat (EUR/MWh) ===")
+    print(comp.round(2).to_string())
 
     P.MODELS_DIR.mkdir(exist_ok=True)
     path = P.MODELS_DIR / f"coupling_{tag}.json"
     path.write_text(json.dumps({
-        "years": years, "preview_year": preview_year, "added_mw": mw, "config": cfg,
+        "fit_years": years, "preview_years": preview_years, "added_mw": mw, "config": cfg,
+        "central_variant": CENTRAL, "variants": VARIANTS,
         "regime_share_pct": share.round(2).to_dict(orient="index"),
         "coupled_cv_mae": cv, "slope_per_100mw_by_regime": slope_tab.round(4).to_dict(orient="index"),
-        "preview": {"actual_mean_price": actual, "old_upper_bound": old_ub, "new_central": central,
-                    "new_range": [lo, hi], "means": summary.round(4).to_dict(),
-                    "coupled_hours": int(c.sum()), "switched_hours": int(switched.sum()),
-                    "by_month": by_month.round(3).to_dict(orient="index"),
-                    "by_hour_local": by_hour.round(3).to_dict(orient="index")},
+        "structural_check": struct.round(4).to_dict(orient="index"),
+        "year_comparison": comp.round(4).to_dict(orient="index"),
+        "by_year": {str(y): {k: v.round(3).to_dict(orient="index") for k, v in r.items()} for y, r in results.items()},
     }, indent=2, default=str))
     print(f"\nWrote {path}")
-    print(f"Wrote {plot(by_month, by_hour, preview_year, mw, tag)}")
 
 
 def plot(by_month: pd.DataFrame, by_hour: pd.DataFrame, year: int, mw: float, tag: str) -> Path:
@@ -303,7 +410,7 @@ def plot(by_month: pd.DataFrame, by_hour: pd.DataFrame, year: int, mw: float, ta
         ax.fill_between(x, df["new min"], df["new max"], color=P.C["binned"], alpha=0.18, lw=0,
                         label="Coupling-aware, range between models")
         ax.plot(x, df["new gbm"], color=P.C["binned"], lw=2.2, marker="o", ms=4,
-                label="Coupling-aware estimate (GBM)")
+                label="Coupling-aware estimate (central, GBM)")
         ax.plot(x, df[["old binned", "old gbm"]].max(axis=1), color=P.C["gbm"], lw=2, ls="--",
                 label="Old upper bound (no coupling; max of binned and GBM)")
         ax.set_xticks(ticks)
@@ -329,11 +436,19 @@ def plot(by_month: pd.DataFrame, by_hour: pd.DataFrame, year: int, mw: float, ta
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--years", type=int, nargs="+", default=P.DEFAULT_YEARS, help="fit years")
-    p.add_argument("--preview-year", type=int, default=P.PREVIEW_YEAR)
+    p.add_argument("--preview-years", type=int, nargs="+", default=[2023, 2024, 2025])
     p.add_argument("--mw", type=float, default=P.PREVIEW_MW)
+    p.add_argument("--check-thresholds", type=float, nargs="+",
+                   help="instead of the report: regime shares and +MW estimate per plain threshold, e.g. 0.5 2 5")
+    p.add_argument("--check-years", type=int, nargs="+", default=[2023, 2024, 2025])
     args = p.parse_args()
-    run(sorted(args.years), args.preview_year, args.mw)
-
+    if args.check_thresholds:
+        pd.set_option("display.width", 220, "display.max_columns", 40)
+        res = threshold_check(sorted(args.years), args.check_years, args.check_thresholds, args.mw)
+        print(f"\n=== Threshold check: regime shares (% of hours) and +{args.mw:.0f} MW mean price change (EUR/MWh) ===")
+        print(res.round(2).to_string())
+        return
+    run(sorted(args.years), sorted(args.preview_years), args.mw)
 
 if __name__ == "__main__":
     main()

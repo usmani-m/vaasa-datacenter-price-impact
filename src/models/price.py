@@ -89,6 +89,8 @@ class BinnedCurve:
             b = (np.floor(g["residual_load"] / BIN_MW) + 0.5) * BIN_MW
             agg = g.groupby(b)["price_eur_mwh"].agg(["median", "size"])
             agg = agg[agg["size"] >= MIN_BIN_HOURS]
+            if len(agg) < 2:  # too few hours for a curve; this year falls back to the pooled curve
+                continue
             iso = IsotonicRegression(increasing=True).fit(agg.index.to_numpy(), agg["median"].to_numpy(),
                                                           sample_weight=agg["size"].to_numpy())
             self.curves[int(y)] = (agg.index.to_numpy(), iso.predict(agg.index.to_numpy()))
