@@ -2,8 +2,11 @@
 
 Every control on every tab is exercised: each dropdown value, the sliders across their whole range
 (keyboard steps), the PPA checkbox, the capacity box, tab switching and the theme toggle. After each
-change every chart on the visible tab must have a Chart.js instance with data, have painted pixels,
-show no error message, and the page must log no console errors.
+change the mouse is swept across every chart (hover tooltips start colour animations), the test waits
+for animations to finish, and then every chart on the visible tab must have a Chart.js instance with
+data, have non-blank pixels and show no error message. The page must log no console errors and throw
+no uncaught errors (`pageerror`: errors inside Chart.js's animation loop are asynchronous and only
+show up there). Animations stay on (reduced_motion="no-preference").
 
     pip install -r requirements-dev.txt
     pytest tests/test_dashboard.py
@@ -27,11 +30,12 @@ import pytest
 sync_api = pytest.importorskip("playwright.sync_api")
 
 SITE = Path(__file__).resolve().parents[1] / "dashboard"
-SETTLE_MS = 400  # chart animations are 250 ms
+SETTLE_MS = 1500  # chart animations are 250 ms; wait well past them
+CONTEXT = {"reduced_motion": "no-preference"}  # keep animations on: the bug lived in the animation loop
 BROWSERS = os.environ.get("DASHBOARD_BROWSERS", "chromium").split(",")
 
 # Per canvas on a tab: is there a chart, does every dataset have finite values, were pixels painted,
-# is an error message shown? Pixel check samples the alpha channel of every 16th pixel.
+# is an error message shown? `painted` = share of sampled pixels (every 16th) that are not transparent.
 CHART_STATE_JS = """(tab) => [...document.querySelectorAll(`#tab-${tab} canvas`)].map((c) => {
   const ch = Chart.getChart(c);
   const finite = (v) => v !== null && v !== undefined && (typeof v === 'object' ? Number.isFinite(v.y) : Number.isFinite(Number(v)));
@@ -39,7 +43,9 @@ CHART_STATE_JS = """(tab) => [...document.querySelectorAll(`#tab-${tab} canvas`)
   let painted = 0;
   if (c.width && c.height) {
     const px = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
-    for (let k = 3; k < px.length; k += 64) if (px[k]) painted++;
+    let n = 0;
+    for (let k = 3; k < px.length; k += 64) { n++; if (px[k]) painted++; }
+    painted /= n;
   }
   return { id: c.id, chart: ch ? ch.id : null, datasets, painted, error: !!c.parentElement.querySelector('.chart-error') };
 })"""
@@ -89,7 +95,7 @@ class Page:
     """A dashboard page that records console errors."""
 
     def __init__(self, browser, url, **ctx):
-        self.ctx = browser.new_context(**ctx)
+        self.ctx = browser.new_context(**{**CONTEXT, **ctx})
         self.pg = self.ctx.new_page()
         self.errors: list[str] = []
         self.pg.on("console", lambda m: m.type == "error" and self.errors.append(m.text))
@@ -103,15 +109,29 @@ class Page:
     def charts(self, tab):
         return {c["id"]: c for c in self.pg.evaluate(CHART_STATE_JS, tab)}
 
+    def hover(self, tab):
+        """Sweep the mouse across every chart on `tab`, as a user would."""
+        for cid in TAB_CHARTS[tab]:
+            box = self.pg.locator(f"#{cid}").bounding_box()
+            if not box:
+                continue
+            for k in range(8):
+                self.pg.mouse.move(box["x"] + box["width"] * (0.08 + 0.12 * k), box["y"] + box["height"] * 0.5)
+                self.pg.wait_for_timeout(30)
+        self.pg.mouse.move(0, 0)
+
     def check(self, tab, what):
-        """Every chart on `tab` has data, painted pixels and no error; no console errors so far."""
+        """Hover every chart, wait for animations; then every chart on `tab` has data, non-blank
+        pixels and no error, and nothing was logged or thrown so far."""
+        self.settle()
+        self.hover(tab)
         self.settle()
         state = self.charts(tab)
         assert sorted(state) == sorted(TAB_CHARTS[tab]), f"{what}: canvases {sorted(state)}"
         for cid, c in state.items():
             assert c["chart"] is not None, f"{what}: {cid} has no chart"
             assert c["datasets"] and all(n > 0 for n in c["datasets"]), f"{what}: {cid} empty dataset {c['datasets']}"
-            assert c["painted"] > 0, f"{what}: {cid} drew nothing"
+            assert c["painted"] > 0.01, f"{what}: {cid} is blank ({c['painted']:.2%} painted)"
             assert not c["error"], f"{what}: {cid} shows an error"
         assert not self.errors, f"{what}: console errors {self.errors}"
         return state
@@ -273,7 +293,7 @@ def test_phone_width(browser, base_url):
 # ---------------------------------------------------------------- isolation
 def test_one_failing_chart_does_not_blank_the_others(browser, base_url):
     """Break the 2025 scatter data on purpose: only that chart may fail."""
-    ctx = browser.new_context()
+    ctx = browser.new_context(**CONTEXT)
     history = json.loads((SITE / "data" / "history.json").read_text(encoding="utf-8"))
     del history["median_by_rl"]["2025"]
     ctx.route("**/data/history.json", lambda route: route.fulfill(
@@ -290,7 +310,7 @@ def test_one_failing_chart_does_not_blank_the_others(browser, base_url):
         state = {c["id"]: c for c in pg.evaluate(CHART_STATE_JS, "system")}
         assert state["c-scatter"]["error"] and state["c-scatter"]["chart"] is None
         for cid in ["c-mix", "c-regime"]:
-            assert state[cid]["chart"] is not None and state[cid]["painted"] > 0 and not state[cid]["error"]
+            assert state[cid]["chart"] is not None and state[cid]["painted"] > 0.01 and not state[cid]["error"]
         assert any("c-scatter" in e for e in errors), errors
         assert not any(e.startswith("uncaught") for e in errors), errors
 

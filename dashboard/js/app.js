@@ -37,7 +37,10 @@
     Chart.defaults.borderColor = p.grid;
     Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
     Chart.defaults.font.size = 12;
-    Chart.defaults.animation = { duration: 250 };
+    // Set the field, never replace the object: Chart.js builds each animation's config from the
+    // keys of defaults.animation, so `= { duration }` dropped `type` and colour animations (e.g. on
+    // hover) failed with "this._fn is not a function", stopping the shared animation loop.
+    Chart.defaults.animation.duration = 250;
     Chart.defaults.maintainAspectRatio = false;
     Chart.defaults.plugins.legend.labels.boxWidth = 12;
     Chart.defaults.plugins.legend.labels.boxHeight = 12;
@@ -53,11 +56,38 @@
     Chart.defaults.plugins.tooltip.borderWidth = 1;
   }
 
+  // Data changes always destroy and recreate the chart, never chart.update() with new data, so no
+  // property can be animated from one type to another.
   function makeChart(id, config) {
     if (charts[id]) charts[id].destroy();
     charts[id] = new Chart($(id), config);
     return charts[id];
   }
+
+  // {x, y} points with non-finite values dropped: one point format for scatter and line data.
+  function pts(xs, ys) {
+    const out = [];
+    xs.forEach((x, k) => {
+      const y = ys[k];
+      if (y !== null && y !== undefined && Number.isFinite(Number(y)) && (typeof x === "string" || Number.isFinite(x))) out.push({ x, y: Number(y) });
+    });
+    return out;
+  }
+  const pairs = (rows) => pts(rows.map((r) => r[0]), rows.map((r) => r[1]));
+
+  // Errors thrown inside Chart.js's shared animation loop are asynchronous, so draw()'s try/catch
+  // cannot see them, and the loop stops for every chart. Log which chart was updating, then
+  // restart the loop and redraw the other charts without animation.
+  let lastUpdated = null;
+  Chart.register({ id: "lastUpdated", beforeUpdate(chart) { lastUpdated = chart.canvas.id; } });
+  window.addEventListener("error", (ev) => {
+    const busy = Object.keys(charts).filter((id) => { try { return Chart.animator.running(charts[id]); } catch (e) { return false; } });
+    console.error(`Uncaught error while charts were rendering (animating: ${busy.join(", ") || "none"}; last updated: ${lastUpdated}):`, ev.error || ev.message);
+    try {
+      Chart.animator._request = null;  // the loop never cleared its request after the throw
+      Object.values(charts).forEach((c) => { Chart.animator.stop(c); c.update("none"); });
+    } catch (e) { /* best effort */ }
+  });
 
   // Draw one chart in isolation: an error is logged and shown in that chart's box only,
   // so it can never stop the other charts on the page from rendering.
@@ -374,9 +404,9 @@
       type: "scatter",
       data: {
         datasets: [
-          { label: "Other years", data: others.map(([a, b]) => ({ x: a, y: b })), backgroundColor: p.context, pointRadius: 1.5, order: 3 },
-          { label: y, data: h.scatter_rl_gw_price[y].map(([a, b]) => ({ x: a, y: b })), backgroundColor: withAlpha(hl, 0.7), pointRadius: 2.4, order: 2 },
-          { type: "line", label: `${y} median`, data: h.median_by_rl[y].map(([a, b]) => ({ x: a, y: b })), borderColor: p.text, borderWidth: 2.5, pointRadius: 0, order: 1 },
+          { label: "Other years", data: pairs(others), backgroundColor: p.context, pointRadius: 1.5, order: 3 },
+          { label: y, data: pairs(h.scatter_rl_gw_price[y]), backgroundColor: withAlpha(hl, 0.7), pointRadius: 2.4, order: 2 },
+          { type: "line", label: `${y} median`, data: pairs(h.median_by_rl[y]), borderColor: p.text, borderWidth: 2.5, pointRadius: 0, order: 1 },
         ],
       },
       options: {
@@ -439,8 +469,8 @@
       type: "scatter",
       data: {
         datasets: [
-          { label: "Hours (sample)", data: r.wind_scatter_ws_cf.map(([a, b]) => ({ x: a, y: b })), backgroundColor: withAlpha(p.s[0], 0.3), pointRadius: 2 },
-          { type: "line", label: "Fitted curve", data: r.wind_curve.ws.map((v, k) => ({ x: v, y: r.wind_curve.cf[k] })), borderColor: p.s[1], borderWidth: 2.5, pointRadius: 0 },
+          { label: "Hours (sample)", data: pairs(r.wind_scatter_ws_cf), backgroundColor: withAlpha(p.s[0], 0.3), pointRadius: 2 },
+          { type: "line", label: "Fitted curve", data: pts(r.wind_curve.ws, r.wind_curve.cf), borderColor: p.s[1], borderWidth: 2.5, pointRadius: 0 },
         ],
       },
       options: {
@@ -468,8 +498,8 @@
         datasets: [
           ...band(wLo, wHi, withAlpha(p.s[0], 0.15), "Wind, 2019–2025 range"),
           ...band(sLo, sHi, withAlpha(p.s[1], 0.15), "Solar, 2019–2025 range"),
-          { label: `Wind ${y}`, data: r.monthly_cf[y].wind_cf, borderColor: p.s[0], borderWidth: 2, pointRadius: 3, pointBackgroundColor: p.s[0] },
-          { label: `Solar ${y}`, data: r.monthly_cf[y].solar_cf, borderColor: p.s[1], borderWidth: 2, pointRadius: 3, pointBackgroundColor: p.s[1] },
+          { label: `Wind ${y}`, data: pts(MONTHS, r.monthly_cf[y].wind_cf), borderColor: p.s[0], borderWidth: 2, pointRadius: 3, pointBackgroundColor: p.s[0] },
+          { label: `Solar ${y}`, data: pts(MONTHS, r.monthly_cf[y].solar_cf), borderColor: p.s[1], borderWidth: 2, pointRadius: 3, pointBackgroundColor: p.s[1] },
         ],
       },
       options: {
