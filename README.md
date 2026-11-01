@@ -50,6 +50,26 @@ The consumer cost is the price change multiplied by existing Finnish consumption
 
 With a PPA, the low-end and central variants can swap places, because in hours when the PPA wind farm produces more than the data center uses, the extra wind lowers prices.
 
+## Dashboard
+
+`dashboard/` is a static site (plain HTML, CSS and JavaScript, with Chart.js from a CDN) that reads precomputed JSON. It has no backend and contains no API keys.
+
+![Impact tab](outputs/dashboard/impact_light.png)
+
+- **Impact.** Choose the data center size, market year, PPA and model variant to see the average price change, extra consumer cost and PPA size, plus the price-duration curve, monthly and hour-of-day price changes, and how the effect grows with size. The range across the three model variants is always shown. Settings can be shared as a link, e.g. `?size=500&year=2025&ppa=1`.
+- **Finnish power system, 2019–2025.** Monthly production mix and imports, price against residual load by year, and how often Finland was price-coupled with Sweden.
+- **Renewables.** Wind output against wind speed with the fitted curve, monthly wind and solar capacity factors, and a wind output calculator.
+- **Method.** The model chain, main assumptions, limitations and data attribution.
+
+To update the data:
+
+```
+python -m src.scenarios.engine            # scenario grid -> outputs/scenarios/grid.json
+python -m src.process.export_dashboard    # compact JSON -> dashboard/data/
+```
+
+To view it locally, run `python -m http.server -d dashboard 8000` and open http://localhost:8000; opening the HTML file directly won't load the data. The site is published to GitHub Pages by `.github/workflows/pages.yml` on pushes to `master`. Before the first deployment, set Settings → Pages → Source to "GitHub Actions". Screenshots of every tab, in light and dark mode and at phone width, are in `outputs/dashboard/`.
+
 ## Limitations
 
 Finland is modeled as a single bidding zone. Scenario results depend on explicit assumptions for data center size, load factor, ramp-up, and renewable power purchase agreements; this is a statistical estimate, not a full electricity-market model.
