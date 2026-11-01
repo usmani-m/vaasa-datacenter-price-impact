@@ -1,0 +1,544 @@
+{
+  "years": [
+    2023,
+    2024,
+    2025
+  ],
+  "preview_year": 2024,
+  "added_mw": 300.0,
+  "config": {
+    "price_tolerance_eur": 0.5,
+    "near_capacity_share": 0.9,
+    "capacity_fallback": {
+      "SE1": {
+        "official_until": "2024-10-29T23:00Z",
+        "steps": [
+          {
+            "from": "2024-10-30T00:00Z",
+            "mw": 1500,
+            "source": "p90 of Fingrid official SE1-FI values in the 12 months before 2024-10-29 (1,504 MW); 2019-2022 typical value 1,530-1,540 MW; max observed import 2024-10-29..2025-11-13 was 1,630 MW. (2023-24 official values were often lower, ~1,250 MW, during outages.)\n"
+          },
+          {
+            "from": "2025-11-14T09:00Z",
+            "mw": 2000,
+            "source": "Aurora Line (second 400 kV SE1-FI line) in service: first hour with import > 1,650 MW was 2025-11-14 09:00 UTC; max observed import Nov-Dec 2025 2,000 MW (p99 1,929 MW). Conservative: the nominal capacity increase is reported to be larger.\n"
+          }
+        ]
+      },
+      "SE3": {
+        "official_until": "2024-10-29T23:00Z",
+        "steps": [
+          {
+            "from": "2024-10-30T00:00Z",
+            "mw": 1200,
+            "source": "Fenno-Skan; Fingrid official SE3-FI value in 2019-2024 (mode 1,200 MW every year)."
+          }
+        ]
+      },
+      "EE": {
+        "official_until": null,
+        "steps": []
+      }
+    },
+    "report_years": [
+      2019,
+      2020,
+      2021,
+      2022,
+      2023,
+      2024,
+      2025
+    ]
+  },
+  "regime_share_pct": {
+    "2019": {
+      "coupled": 60.96,
+      "coupled_se3": 2.89,
+      "import_constrained": 26.02,
+      "separated_other": 10.14,
+      "export_constrained": 0.0,
+      "unknown": 0
+    },
+    "2020": {
+      "coupled": 38.68,
+      "coupled_se3": 17.93,
+      "import_constrained": 28.04,
+      "separated_other": 15.35,
+      "export_constrained": 0.0,
+      "unknown": 0
+    },
+    "2021": {
+      "coupled": 40.74,
+      "coupled_se3": 31.59,
+      "import_constrained": 14.11,
+      "separated_other": 13.56,
+      "export_constrained": 0.0,
+      "unknown": 0
+    },
+    "2022": {
+      "coupled": 27.04,
+      "coupled_se3": 31.86,
+      "import_constrained": 18.6,
+      "separated_other": 22.5,
+      "export_constrained": 0.0,
+      "unknown": 0
+    },
+    "2023": {
+      "coupled": 66.64,
+      "coupled_se3": 13.37,
+      "import_constrained": 3.98,
+      "separated_other": 13.92,
+      "export_constrained": 2.09,
+      "unknown": 0
+    },
+    "2024": {
+      "coupled": 56.93,
+      "coupled_se3": 6.47,
+      "import_constrained": 5.82,
+      "separated_other": 26.06,
+      "export_constrained": 4.72,
+      "unknown": 0
+    },
+    "2025": {
+      "coupled": 39.74,
+      "coupled_se3": 3.12,
+      "import_constrained": 2.95,
+      "separated_other": 50.39,
+      "export_constrained": 3.81,
+      "unknown": 0
+    }
+  },
+  "coupled_cv_mae": {
+    "gbm (no SE1 price)": 13.64335064502603,
+    "gbm + SE1 price": 0.5156009682616065
+  },
+  "slope_per_100mw_by_regime": {
+    "coupled": {
+      "full-sample binned": 1.8193,
+      "full-sample gbm": 1.8991,
+      "own-regime binned": 1.1962,
+      "own-regime gbm": 1.1818,
+      "own-regime gbm_se1": 0.0161,
+      "hours": 13455.0,
+      "mean price": 24.6812
+    },
+    "coupled_se3": {
+      "full-sample binned": 2.5426,
+      "full-sample gbm": 3.7683,
+      "own-regime binned": NaN,
+      "own-regime gbm": NaN,
+      "own-regime gbm_se1": NaN,
+      "hours": 1988.0,
+      "mean price": 86.284
+    },
+    "import_constrained": {
+      "full-sample binned": 2.9843,
+      "full-sample gbm": 4.6301,
+      "own-regime binned": 1.457,
+      "own-regime gbm": 3.2639,
+      "own-regime gbm_se1": NaN,
+      "hours": 1118.0,
+      "mean price": 91.9864
+    },
+    "export_constrained": {
+      "full-sample binned": 0.7217,
+      "full-sample gbm": 0.7748,
+      "own-regime binned": 0.4001,
+      "own-regime gbm": 0.6805,
+      "own-regime gbm_se1": NaN,
+      "hours": 922.0,
+      "mean price": 4.5511
+    },
+    "separated_other": {
+      "full-sample binned": 3.0573,
+      "full-sample gbm": 3.8779,
+      "own-regime binned": NaN,
+      "own-regime gbm": NaN,
+      "own-regime gbm_se1": NaN,
+      "hours": 7811.0,
+      "mean price": 77.4066
+    }
+  },
+  "preview": {
+    "actual_mean_price": 45.681662097326935,
+    "old_upper_bound": 8.386048935369754,
+    "new_central": 4.571080431338459,
+    "new_range": [
+      2.6203502243202945,
+      4.571080431338459
+    ],
+    "means": {
+      "new binned": 3.3493,
+      "new gbm": 4.5711,
+      "new gbm_se1": 2.6204,
+      "old binned": 6.3166,
+      "old gbm": 8.386
+    },
+    "coupled_hours": 5539,
+    "switched_hours": 444,
+    "by_month": {
+      "1": {
+        "old binned": 9.096,
+        "old gbm": 13.134,
+        "new binned": 1.969,
+        "new gbm": 4.732,
+        "new gbm_se1": 2.095,
+        "new min": 1.969,
+        "new max": 4.732,
+        "coupled %": 55.78
+      },
+      "2": {
+        "old binned": 5.279,
+        "old gbm": 10.723,
+        "new binned": 2.026,
+        "new gbm": 4.995,
+        "new gbm_se1": 2.136,
+        "new min": 2.026,
+        "new max": 4.995,
+        "coupled %": 71.839
+      },
+      "3": {
+        "old binned": 4.992,
+        "old gbm": 5.583,
+        "new binned": 4.122,
+        "new gbm": 4.689,
+        "new gbm_se1": 2.064,
+        "new min": 2.064,
+        "new max": 4.689,
+        "coupled %": 69.448
+      },
+      "4": {
+        "old binned": 6.656,
+        "old gbm": 7.431,
+        "new binned": 5.963,
+        "new gbm": 5.09,
+        "new gbm_se1": 1.263,
+        "new min": 1.263,
+        "new max": 5.963,
+        "coupled %": 86.528
+      },
+      "5": {
+        "old binned": 6.804,
+        "old gbm": 13.51,
+        "new binned": 5.365,
+        "new gbm": 7.311,
+        "new gbm_se1": 4.841,
+        "new min": 4.841,
+        "new max": 7.311,
+        "coupled %": 67.473
+      },
+      "6": {
+        "old binned": 7.698,
+        "old gbm": 10.823,
+        "new binned": 6.436,
+        "new gbm": 5.819,
+        "new gbm_se1": 4.321,
+        "new min": 4.321,
+        "new max": 6.436,
+        "coupled %": 57.361
+      },
+      "7": {
+        "old binned": 3.507,
+        "old gbm": 6.401,
+        "new binned": 3.58,
+        "new gbm": 3.598,
+        "new gbm_se1": 1.795,
+        "new min": 1.795,
+        "new max": 3.598,
+        "coupled %": 72.702
+      },
+      "8": {
+        "old binned": 2.372,
+        "old gbm": 4.312,
+        "new binned": 1.767,
+        "new gbm": 3.475,
+        "new gbm_se1": 1.58,
+        "new min": 1.58,
+        "new max": 3.475,
+        "coupled %": 82.124
+      },
+      "9": {
+        "old binned": 12.239,
+        "old gbm": 8.002,
+        "new binned": 3.53,
+        "new gbm": 4.462,
+        "new gbm_se1": 4.115,
+        "new min": 3.53,
+        "new max": 4.462,
+        "coupled %": 41.528
+      },
+      "10": {
+        "old binned": 7.803,
+        "old gbm": 6.21,
+        "new binned": 2.901,
+        "new gbm": 3.49,
+        "new gbm_se1": 2.286,
+        "new min": 2.286,
+        "new max": 3.49,
+        "coupled %": 67.671
+      },
+      "11": {
+        "old binned": 5.204,
+        "old gbm": 7.101,
+        "new binned": 1.26,
+        "new gbm": 3.121,
+        "new gbm_se1": 2.288,
+        "new min": 1.26,
+        "new max": 3.121,
+        "coupled %": 38.75
+      },
+      "12": {
+        "old binned": 4.262,
+        "old gbm": 7.462,
+        "new binned": 1.307,
+        "new gbm": 4.065,
+        "new gbm_se1": 2.654,
+        "new min": 1.307,
+        "new max": 4.065,
+        "coupled %": 47.984
+      }
+    },
+    "by_hour_local": {
+      "0": {
+        "old binned": 5.779,
+        "old gbm": 6.807,
+        "new binned": 3.001,
+        "new gbm": 3.476,
+        "new gbm_se1": 1.486,
+        "new min": 1.486,
+        "new max": 3.476,
+        "coupled %": 71.703
+      },
+      "1": {
+        "old binned": 5.316,
+        "old gbm": 5.501,
+        "new binned": 2.55,
+        "new gbm": 3.274,
+        "new gbm_se1": 1.47,
+        "new min": 1.47,
+        "new max": 3.274,
+        "coupled %": 68.956
+      },
+      "2": {
+        "old binned": 5.049,
+        "old gbm": 5.256,
+        "new binned": 2.417,
+        "new gbm": 2.876,
+        "new gbm_se1": 1.034,
+        "new min": 1.034,
+        "new max": 2.876,
+        "coupled %": 71.978
+      },
+      "3": {
+        "old binned": 5.038,
+        "old gbm": 4.673,
+        "new binned": 2.508,
+        "new gbm": 2.77,
+        "new gbm_se1": 0.954,
+        "new min": 0.954,
+        "new max": 2.77,
+        "coupled %": 74.451
+      },
+      "4": {
+        "old binned": 5.334,
+        "old gbm": 4.979,
+        "new binned": 2.67,
+        "new gbm": 2.66,
+        "new gbm_se1": 0.832,
+        "new min": 0.832,
+        "new max": 2.67,
+        "coupled %": 75.824
+      },
+      "5": {
+        "old binned": 5.597,
+        "old gbm": 5.731,
+        "new binned": 2.747,
+        "new gbm": 3.038,
+        "new gbm_se1": 1.185,
+        "new min": 1.185,
+        "new max": 3.038,
+        "coupled %": 74.725
+      },
+      "6": {
+        "old binned": 6.297,
+        "old gbm": 7.756,
+        "new binned": 3.035,
+        "new gbm": 3.73,
+        "new gbm_se1": 1.95,
+        "new min": 1.95,
+        "new max": 3.73,
+        "coupled %": 68.956
+      },
+      "7": {
+        "old binned": 6.538,
+        "old gbm": 9.038,
+        "new binned": 3.583,
+        "new gbm": 4.274,
+        "new gbm_se1": 2.638,
+        "new min": 2.638,
+        "new max": 4.274,
+        "coupled %": 62.637
+      },
+      "8": {
+        "old binned": 6.847,
+        "old gbm": 10.403,
+        "new binned": 3.48,
+        "new gbm": 6.044,
+        "new gbm_se1": 3.874,
+        "new min": 3.48,
+        "new max": 6.044,
+        "coupled %": 60.0
+      },
+      "9": {
+        "old binned": 6.99,
+        "old gbm": 10.455,
+        "new binned": 3.771,
+        "new gbm": 5.857,
+        "new gbm_se1": 3.497,
+        "new min": 3.497,
+        "new max": 5.857,
+        "coupled %": 58.63
+      },
+      "10": {
+        "old binned": 7.311,
+        "old gbm": 10.871,
+        "new binned": 3.524,
+        "new gbm": 5.362,
+        "new gbm_se1": 3.073,
+        "new min": 3.073,
+        "new max": 5.362,
+        "coupled %": 58.356
+      },
+      "11": {
+        "old binned": 7.018,
+        "old gbm": 10.661,
+        "new binned": 3.694,
+        "new gbm": 5.843,
+        "new gbm_se1": 3.72,
+        "new min": 3.694,
+        "new max": 5.843,
+        "coupled %": 56.986
+      },
+      "12": {
+        "old binned": 6.783,
+        "old gbm": 9.683,
+        "new binned": 3.599,
+        "new gbm": 5.799,
+        "new gbm_se1": 3.795,
+        "new min": 3.599,
+        "new max": 5.799,
+        "coupled %": 56.284
+      },
+      "13": {
+        "old binned": 6.465,
+        "old gbm": 8.414,
+        "new binned": 3.543,
+        "new gbm": 5.611,
+        "new gbm_se1": 3.678,
+        "new min": 3.543,
+        "new max": 5.611,
+        "coupled %": 56.011
+      },
+      "14": {
+        "old binned": 6.54,
+        "old gbm": 8.661,
+        "new binned": 3.316,
+        "new gbm": 5.053,
+        "new gbm_se1": 3.398,
+        "new min": 3.316,
+        "new max": 5.053,
+        "coupled %": 56.011
+      },
+      "15": {
+        "old binned": 6.57,
+        "old gbm": 9.253,
+        "new binned": 3.769,
+        "new gbm": 5.162,
+        "new gbm_se1": 3.099,
+        "new min": 3.099,
+        "new max": 5.162,
+        "coupled %": 58.743
+      },
+      "16": {
+        "old binned": 6.625,
+        "old gbm": 8.906,
+        "new binned": 4.076,
+        "new gbm": 4.986,
+        "new gbm_se1": 3.223,
+        "new min": 3.223,
+        "new max": 4.986,
+        "coupled %": 56.831
+      },
+      "17": {
+        "old binned": 6.542,
+        "old gbm": 8.15,
+        "new binned": 3.628,
+        "new gbm": 5.284,
+        "new gbm_se1": 3.5,
+        "new min": 3.5,
+        "new max": 5.284,
+        "coupled %": 56.164
+      },
+      "18": {
+        "old binned": 6.639,
+        "old gbm": 9.158,
+        "new binned": 3.659,
+        "new gbm": 5.478,
+        "new gbm_se1": 3.387,
+        "new min": 3.387,
+        "new max": 5.478,
+        "coupled %": 57.808
+      },
+      "19": {
+        "old binned": 6.671,
+        "old gbm": 10.363,
+        "new binned": 3.739,
+        "new gbm": 5.139,
+        "new gbm_se1": 3.14,
+        "new min": 3.14,
+        "new max": 5.139,
+        "coupled %": 56.986
+      },
+      "20": {
+        "old binned": 6.585,
+        "old gbm": 9.942,
+        "new binned": 3.892,
+        "new gbm": 4.935,
+        "new gbm_se1": 2.876,
+        "new min": 2.876,
+        "new max": 4.935,
+        "coupled %": 60.548
+      },
+      "21": {
+        "old binned": 6.319,
+        "old gbm": 9.736,
+        "new binned": 3.429,
+        "new gbm": 4.64,
+        "new gbm_se1": 2.451,
+        "new min": 2.451,
+        "new max": 4.64,
+        "coupled %": 66.484
+      },
+      "22": {
+        "old binned": 6.748,
+        "old gbm": 9.14,
+        "new binned": 3.404,
+        "new gbm": 4.583,
+        "new gbm_se1": 2.574,
+        "new min": 2.574,
+        "new max": 4.583,
+        "coupled %": 66.209
+      },
+      "23": {
+        "old binned": 5.977,
+        "old gbm": 7.676,
+        "new binned": 3.336,
+        "new gbm": 3.793,
+        "new gbm_se1": 2.013,
+        "new min": 2.013,
+        "new max": 3.793,
+        "coupled %": 67.582
+      }
+    }
+  }
+}

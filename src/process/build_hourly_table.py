@@ -30,6 +30,9 @@ Columns (power in MW = MWh/h, index = hour start, UTC):
                Midsummer Eve and Christmas Eve)
   price        price_eur_mwh: ENTSO-E day-ahead price, bidding zone FI (EUR/MWh), hourly mean of
                15-min prices from 2025-10-01; flag_price as for the Fingrid series
+  neighbours   price_se1/se3/ee (ENTSO-E day-ahead), imp_se1/se3/ee (MW, + = import into Finland;
+               Fingrid measured flows), cap_se1_fi/cap_se3_fi/cap_ee_fi (Fingrid official day-ahead
+               import capacity; NaN where not published)
 
 Usage:
     python -m src.process.build_hourly_table --year 2019 2020 2021 2022 2023 2024 2025
@@ -57,6 +60,7 @@ FLAT_RUN_H = 6  # runs of >= this many identical hourly values are marked suspec
 LOCAL_TZ = "Europe/Helsinki"
 FINGRID_SERIES = ["consumption", "production", "wind", "solar", "nuclear", "hydro", "net_import"]
 FLAT_IGNORE_ZERO = {"solar"}  # zero at night is real, not frozen data
+NEIGHBOURS = ["se1", "se3", "ee"]  # bidding zones used for price coupling
 # Short name in config/fingrid_datasets.yaml for wind capacity (Fingrid 268: forecast
 # capacity, i.e. capacity actually producing; see the config notes).
 WIND_CAPACITY_NAME: str | None = "wind_capacity"
@@ -227,6 +231,16 @@ def build(year: int) -> pd.DataFrame:
     else:
         t["price_eur_mwh"], t["flag_price"] = np.nan, "missing"
     mark_suspect(t, suspects, ["price"])  # flag_price (series name "price" in data_issues.yaml)
+
+    # Neighbours, for price coupling: day-ahead prices, imports per border (+ = into Finland,
+    # i.e. minus Fingrid's flow sign) and Fingrid's official day-ahead import capacity
+    # (NaN where none is published, e.g. SE1/SE3 after 2024-10-29; see config/coupling.yaml).
+    for nb in NEIGHBOURS:
+        pp = entsoe.hourly_path(start, end, nb.upper())
+        t[f"price_{nb}"] = pd.read_parquet(pp)["value"].reindex(idx) if pp.exists() else np.nan
+        t[f"imp_{nb}"], _ = fill_short_gaps(-fg(f"flow_{nb}"))
+        cp = fingrid.hourly_path(f"cap_{nb}_fi", start, end)
+        t[f"cap_{nb}_fi"] = pd.read_parquet(cp)["value"].reindex(idx) if cp.exists() else np.nan
 
     for c in t.columns:
         if c.startswith("flag_"):

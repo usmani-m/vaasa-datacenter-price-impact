@@ -42,6 +42,8 @@ The wind curve is fitted on 2023–2025 and excludes hours with a day-ahead pric
 
 Price model: price is modelled from residual load, fitted on 2023–2025 and excluding the 2022 energy crisis. The tool shows a binned supply curve alongside a gradient-boosting model whose price can only rise with residual load. The estimated effect of extra load keeps imports, hydro and nuclear output fixed. In reality these respond to higher prices, so the result is a statistical estimate, not a simulation of the market.
 
+Price coupling: Finland often has the same price as Sweden. In those hours extra Finnish demand is largely met by imports, so the plain price slope overstates its effect. The coupling-aware estimate (`src/models/coupling.py`) classifies each hour by comparing the Finnish price with SE1, SE3 and Estonian prices and with import capacity. In coupled hours, extra load up to the spare import capacity is met by imports; anything beyond that, and all load in price-separated hours, follows the Finnish price curve. Import capacities come from Fingrid's official day-ahead values. Since the Nordic day-ahead market moved to flow-based coupling on 29 October 2024, there are no official values for the Swedish borders, and documented fixed values are used instead (`config/coupling.yaml`). They are approximate.
+
 Prices: day-ahead prices for the Finnish bidding zone come from the ENTSO-E Transparency Platform. Since 1 October 2025 they are set per 15 minutes; this tool averages them to hourly values so all years are comparable. On 24 November 2023 (13–22 UTC) the price was −500 €/MWh, which was widely reported as the result of a bidding error rather than market conditions.
 
 Data quality, 2019–2025:

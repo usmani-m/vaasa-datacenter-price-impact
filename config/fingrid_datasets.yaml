@@ -93,6 +93,19 @@ datasets:
       it has 959 missing hours (Apr-Jun 2024) that would leave gaps. Still fetched so the check can
       be repeated for other years.
 
+  # Day-ahead transmission capacity into Finland (import direction), official values published
+  # the day before. SE1-FI and SE3-FI stop on 2024-10-29 (Nordic flow-based market coupling);
+  # config/coupling.yaml gives the fixed values used after that.
+  cap_se1_fi:
+    id: 24
+    name: Day-ahead transmission capacity SE1-FI - official
+  cap_se3_fi:
+    id: 25
+    name: Day-ahead transmission capacity SE3-FI - official
+  cap_ee_fi:
+    id: 112
+    name: Day-ahead transmission capacity EE-FI - official
+
   # Cross-check only (fetched for Jan 2024): real-time net export. Sign: positive = net EXPORT.
   net_export_rt:
     id: 194

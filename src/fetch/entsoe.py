@@ -1,15 +1,15 @@
-"""Fetch Finland's day-ahead prices from the ENTSO-E Transparency Platform (entsoe-py).
+"""Fetch day-ahead prices (FI and neighbouring zones) from the ENTSO-E Transparency Platform.
 
 Data: ENTSO-E Transparency Platform (transparency.entsoe.eu).
 
-- Bidding zone FI, EUR/MWh, day-ahead (SDAC) prices.
+- Bidding zones FI, SE1, SE3, EE (see AREAS), EUR/MWh, day-ahead (SDAC) prices.
 - Resolution: hourly until 2025-09-30; 15 min from delivery day 2025-10-01. The raw monthly
   cache keeps the native resolution; the hourly output is the mean of the intervals in each
   UTC hour (an hour of 15-min prices is complete with 4 values).
 - Token in .env as ENTSOE_API_KEY. One request per month, polite pause, retries.
 
 Usage:
-    python -m src.fetch.entsoe --start 2019-01-01 --end 2026-01-01
+    python -m src.fetch.entsoe --start 2019-01-01 --end 2026-01-01 --areas FI SE1 SE3 EE
 """
 
 from __future__ import annotations
@@ -26,12 +26,12 @@ from dotenv import load_dotenv
 from entsoe import EntsoePandasClient
 from entsoe.exceptions import NoMatchingDataError
 
-AREA = "FI"
+AREAS = {"FI": "FI", "SE1": "SE_1", "SE3": "SE_3", "EE": "EE"}  # label -> entsoe-py area code
 MIN_INTERVAL_S = 2.0
 MAX_RETRIES = 5
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-RAW_DIR = REPO_ROOT / "data" / "raw" / "entsoe" / f"{AREA}_day_ahead"
+RAW_ROOT = REPO_ROOT / "data" / "raw" / "entsoe"
 HOURLY_DIR = REPO_ROOT / "data" / "hourly" / "entsoe"
 
 log = logging.getLogger(__name__)
@@ -53,12 +53,12 @@ class EntsoeFetcher:
             time.sleep(MIN_INTERVAL_S - elapsed)
         self._last_request = time.monotonic()
 
-    def day_ahead(self, start: pd.Timestamp, end: pd.Timestamp) -> pd.Series:
+    def day_ahead(self, start: pd.Timestamp, end: pd.Timestamp, area: str = "FI") -> pd.Series:
         """Prices with start <= timestamp < end at native resolution, UTC index."""
         for attempt in range(1, MAX_RETRIES + 1):
             self._wait()
             try:
-                s = self.client.query_day_ahead_prices(AREA, start=start, end=end)
+                s = self.client.query_day_ahead_prices(AREAS[area], start=start, end=end)
             except NoMatchingDataError:
                 log.warning("No data for %s .. %s", start, end)
                 return pd.Series(dtype=float, index=pd.DatetimeIndex([], tz="UTC"))
@@ -81,22 +81,28 @@ class EntsoeFetcher:
         raise RuntimeError(f"ENTSO-E request failed after {MAX_RETRIES} attempts: {start} .. {end}")
 
 
-def fetch_prices(start: str | pd.Timestamp, end: str | pd.Timestamp, refresh: bool = False) -> pd.Series:
+def raw_dir(area: str = "FI") -> Path:
+    return RAW_ROOT / f"{area}_day_ahead"
+
+
+def fetch_prices(start: str | pd.Timestamp, end: str | pd.Timestamp, refresh: bool = False,
+                 area: str = "FI") -> pd.Series:
     """[start, end) at native resolution; one cached Parquet file per completed month."""
     start, end = _utc(start), _utc(end)
-    RAW_DIR.mkdir(parents=True, exist_ok=True)
+    cache = raw_dir(area)
+    cache.mkdir(parents=True, exist_ok=True)
     now = pd.Timestamp.now(tz="UTC")
     fetcher = None
     parts = []
     for m_start in pd.date_range(start.floor("D").replace(day=1), end, freq="MS", inclusive="left"):
         m_end = m_start + pd.offsets.MonthBegin(1)
-        path = RAW_DIR / f"{m_start:%Y-%m}.parquet"
+        path = cache / f"{m_start:%Y-%m}.parquet"
         if path.exists() and not refresh:
             s = pd.read_parquet(path)["price_eur_mwh"]
         else:
             fetcher = fetcher or EntsoeFetcher()
-            log.info("Fetching FI day-ahead prices for %s", f"{m_start:%Y-%m}")
-            s = fetcher.day_ahead(m_start, min(m_end, now))
+            log.info("Fetching %s day-ahead prices for %s", area, f"{m_start:%Y-%m}")
+            s = fetcher.day_ahead(m_start, min(m_end, now), area)
             # day-ahead prices for tomorrow exist, so a month is complete once it has ended
             if m_end <= now:
                 s.rename("price_eur_mwh").to_frame().to_parquet(path)
@@ -120,8 +126,8 @@ def to_hourly(s: pd.Series, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFr
     return hourly
 
 
-def hourly_path(start: str | pd.Timestamp, end: str | pd.Timestamp) -> Path:
-    return HOURLY_DIR / f"price_{AREA.lower()}_{_utc(start):%Y%m%d}_{_utc(end):%Y%m%d}.parquet"
+def hourly_path(start: str | pd.Timestamp, end: str | pd.Timestamp, area: str = "FI") -> Path:
+    return HOURLY_DIR / f"price_{area.lower()}_{_utc(start):%Y%m%d}_{_utc(end):%Y%m%d}.parquet"
 
 
 def _utc(t: str | pd.Timestamp) -> pd.Timestamp:
@@ -133,22 +139,23 @@ def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--start", required=True, help="UTC start (inclusive), e.g. 2019-01-01")
     p.add_argument("--end", required=True, help="UTC end (exclusive), e.g. 2026-01-01")
+    p.add_argument("--areas", nargs="+", default=["FI"], choices=list(AREAS), help="bidding zones, e.g. FI SE1 SE3 EE")
     p.add_argument("--refresh", action="store_true", help="ignore cached months")
     args = p.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
     start, end = _utc(args.start), _utc(args.end)
-    raw = fetch_prices(start, end, refresh=args.refresh)
     HOURLY_DIR.mkdir(parents=True, exist_ok=True)
-    # one hourly file per calendar year, matching the other hourly series
-    for year in range(start.year, (end - pd.Timedelta("1h")).year + 1):
-        ys, ye = max(start, _utc(f"{year}-01-01")), min(end, _utc(f"{year + 1}-01-01"))
-        hourly = to_hourly(raw[(raw.index >= ys) & (raw.index < ye)], ys, ye)
-        path = hourly_path(ys, ye)
-        hourly.to_parquet(path)
-        log.info("Wrote %d hourly rows to %s (%d missing, %d incomplete)", len(hourly), path,
-                 int(hourly["value"].isna().sum()), int((~hourly["complete"]).sum()))
-
+    for area in args.areas:
+        raw = fetch_prices(start, end, refresh=args.refresh, area=area)
+        # one hourly file per calendar year, matching the other hourly series
+        for year in range(start.year, (end - pd.Timedelta("1h")).year + 1):
+            ys, ye = max(start, _utc(f"{year}-01-01")), min(end, _utc(f"{year + 1}-01-01"))
+            hourly = to_hourly(raw[(raw.index >= ys) & (raw.index < ye)], ys, ye)
+            path = hourly_path(ys, ye, area)
+            hourly.to_parquet(path)
+            log.info("Wrote %d hourly rows to %s (%d missing, %d incomplete)", len(hourly), path,
+                     int(hourly["value"].isna().sum()), int((~hourly["complete"]).sum()))
 
 if __name__ == "__main__":
     main()

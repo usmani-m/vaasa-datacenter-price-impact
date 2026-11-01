@@ -117,7 +117,7 @@ class BinnedCurve:
         same = [f for (y, m), f in self.factors.items() if m == month]
         return float(np.mean(same)) if same else 1.0
 
-    def predict(self, d: pd.DataFrame, extra_mw: float = 0.0) -> np.ndarray:
+    def predict(self, d: pd.DataFrame, extra_mw: float | np.ndarray = 0.0) -> np.ndarray:
         f = np.array([self._factor(int(y), int(m)) for y, m in zip(d["year"], d["month_local"])])
         return f * self._curve(d["year"], d["residual_load"] + extra_mw).to_numpy()
 
@@ -131,17 +131,22 @@ class BinnedCurve:
 
 
 class GBMPrice:
+    """extra_features: added to FEATURES with the given monotonic constraint each (e.g. SE1 price, +1)."""
     name = "gbm"
+
+    def __init__(self, extra_features: dict[str, int] | None = None):
+        self.features = FEATURES + list(extra_features or {})
+        self.monotonic = MONOTONIC + list((extra_features or {}).values())
 
     def fit(self, d: pd.DataFrame):
         self.model = HistGradientBoostingRegressor(
             max_iter=500, learning_rate=0.05, max_leaf_nodes=31, min_samples_leaf=50,
-            l2_regularization=1.0, monotonic_cst=MONOTONIC, random_state=0)
-        self.model.fit(d[FEATURES], d["price_eur_mwh"])
+            l2_regularization=1.0, monotonic_cst=self.monotonic, random_state=0)
+        self.model.fit(d[self.features], d["price_eur_mwh"])
         return self
 
-    def predict(self, d: pd.DataFrame, extra_mw: float = 0.0) -> np.ndarray:
-        x = d[FEATURES].copy()
+    def predict(self, d: pd.DataFrame, extra_mw: float | np.ndarray = 0.0) -> np.ndarray:
+        x = d[self.features].copy()
         x["residual_load"] = x["residual_load"] + extra_mw
         return self.model.predict(x)
 
